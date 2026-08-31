@@ -38,7 +38,7 @@ Parâmetros:
   "Rio Grande do Sul"). Fora do RS -> available=false com a explicação em notes,
   sem número inventado. Nível de estado usa um ponto representativo (centroide),
   não média por área.
-- period: "now" (leitura horária mais recente), "7d" / "30" (dias para trás), ou
+- period: "now" (leitura horária mais recente), "7d" / "30d" (dias para trás), ou
   intervalo ISO "2026-08-01/2026-08-10". Padrão "7d".
 - granularity: "daily" (padrão) ou "hourly". soil_moisture e soil_temperature só
   existem em "hourly"; "now" força horário.

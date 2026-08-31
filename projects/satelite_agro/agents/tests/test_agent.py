@@ -15,6 +15,8 @@ from satelite_agro_agent.config import DEFAULT_MCP_URL, DEFAULT_MODEL, Settings
         "previsão do futuro",
         "Rio Grande do Sul",
         "notes",
+        "análise causal",
+        "monitoramento",
     ],
 )
 def test_system_prompt_carrega_as_regras(trecho):
