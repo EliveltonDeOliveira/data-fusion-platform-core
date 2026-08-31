@@ -1,0 +1,24 @@
+# Lint + formatação de todo o Python do repo (rodar via uv em container).
+required-version = ">=0.14"
+target-version = "py311"
+line-length = 100
+
+[lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "UP",       # pyupgrade
+    "B",        # flake8-bugbear
+    "S",        # flake8-bandit
+    "BLE",      # flake8-blind-except
+    "SIM",      # flake8-simplify
+    "RUF",      # regras do próprio ruff
+]
+
+[lint.per-file-ignores]
+# asserts e afins são o esperado em teste
+"**/tests/**" = ["S101", "S311"]
+
+[lint.isort]
+known-first-party = ["satelite_agro_mcp", "satelite_agro_agent"]

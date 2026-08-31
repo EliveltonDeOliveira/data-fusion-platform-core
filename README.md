@@ -18,9 +18,9 @@ saída constitui recomendação de ação:
 
 ```
 shared/
-  gateway/        # ponto de entrada em Go: controle de vazão, fila, cache, roteamento de LLM
-  llm_router/     # roteamento e fallback entre provedores de LLM
-  db/             # schema versionado (postgis-init + migrations)
+  gateway/        # ponto de entrada (Go)
+  llm_router/     # seleção de provedor de LLM
+  db/migrations/  # schema versionado (golang-migrate)
 projects/
   satelite_agro/      { ingestion · agents · mcp_server · rag_corpus }
   radio_comunicacao/  { ingestion · agents · mcp_server · rag_corpus }
@@ -36,6 +36,13 @@ tests/eval/       # dataset dourado por projeto
 | [Copernicus / Sentinel Hub (CDSE)](https://dataspace.copernicus.eu/) | Imagens Sentinel para índices de vegetação _(planejado)_ |
 | [IBGE — Malhas Territoriais](https://servicodados.ibge.gov.br/api/docs/malhas) | Limites territoriais para recorte e estatística zonal |
 | [Anatel — Dados Abertos](https://www.gov.br/anatel/pt-br/dados/dados-abertos) | Estações licenciadas (ERB, VSAT, radiodifusão) e atos normativos |
+
+## Desenvolvimento
+
+Tudo roda em container — nada é instalado na máquina. Dependências Python com
+[uv](https://docs.astral.sh/uv/) (`uv.lock` por serviço), lint/format com
+[ruff](https://docs.astral.sh/ruff/) (`ruff.toml`). Cada serviço tem um alvo
+`test` no seu `Dockerfile`.
 
 ## Atribuição
 

@@ -1,8 +1,5 @@
-// Gateway (Go) — esqueleto.
-//
-// Ponto único de entrada para o tráfego dos agentes: controle de vazão,
-// enfileiramento, cache de resposta e roteamento entre provedores de LLM.
-// Por ora expõe apenas /healthz e um /api/* ainda não implementado.
+// Gateway (Go) — esqueleto. Por ora expõe /healthz e um /api/* ainda não
+// implementado.
 package main
 
 import (
