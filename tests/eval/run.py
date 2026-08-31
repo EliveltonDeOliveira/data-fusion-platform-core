@@ -2,10 +2,15 @@
 
     AGENT_URL=<url-do-agente> python run.py [--dataset cases/satelite_agro.json]
                                             [--case ID] [--json] [--timeout 180]
+                                            [--delay 6]
 
 So stdlib. Envia cada pergunta a `POST {AGENT_URL}/ask`, aplica as checagens de
 `checks.py` e imprime um relatorio. Sai com codigo 1 se algum caso falhar — da
 pra usar em CI. Consome cota do provedor de LLM do agente.
+
+Cota: o agente ja segura as chamadas ao modelo abaixo do teto do provedor
+(token bucket local). `--delay` espaca os casos como 2a camada e o runner recua
+uma vez se ainda assim vier 'cota estourada'. `--delay 0` desliga o espacamento.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -21,6 +27,20 @@ from pathlib import Path
 import checks
 
 _HERE = Path(__file__).parent
+
+# O agente ja segura as chamadas ao modelo abaixo do teto do provedor gratuito.
+# Isto aqui e a segunda camada: espacar os casos e recuar se mesmo assim vier um
+# "cota estourada", pra um `run.py` sem supervisao nao queimar o orcamento.
+_RATE_LIMIT_MARKERS = ("RESOURCE_EXHAUSTED", "429", "quota", "rate limit")
+_BACKOFF_SECONDS = 65.0
+
+
+def _looks_rate_limited(exc: urllib.error.HTTPError) -> bool:
+    try:
+        body = exc.read().decode("utf-8", "replace")
+    except OSError:
+        body = ""
+    return any(m.lower() in body.lower() for m in _RATE_LIMIT_MARKERS)
 
 
 def ask(agent_url: str, question: str, timeout: float) -> dict:
@@ -35,18 +55,33 @@ def ask(agent_url: str, question: str, timeout: float) -> dict:
         return json.load(resp)
 
 
+def ask_with_backoff(agent_url: str, question: str, timeout: float) -> dict:
+    """Uma tentativa; se o agente responder 'cota estourada', recua uma vez."""
+    try:
+        return ask(agent_url, question, timeout)
+    except urllib.error.HTTPError as exc:
+        if _looks_rate_limited(exc):
+            print(f"       … cota do provedor estourada; aguardando {_BACKOFF_SECONDS:.0f}s")
+            time.sleep(_BACKOFF_SECONDS)
+            return ask(agent_url, question, timeout)
+        raise
+
+
 def load_dataset(path: Path) -> dict:
     with path.open(encoding="utf-8") as fh:
         return json.load(fh)
 
 
-def run(agent_url: str, dataset: dict, *, only: str | None, timeout: float) -> list[checks.Report]:
+def run(
+    agent_url: str, dataset: dict, *, only: str | None, timeout: float, delay: float
+) -> list[checks.Report]:
     reports: list[checks.Report] = []
-    for case in dataset.get("cases", []):
-        if only and case.get("id") != only:
-            continue
+    cases = [c for c in dataset.get("cases", []) if not only or c.get("id") == only]
+    for i, case in enumerate(cases):
+        if i and delay:
+            time.sleep(delay)
         try:
-            response = ask(agent_url, case["question"], timeout)
+            response = ask_with_backoff(agent_url, case["question"], timeout)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             rep = checks.Report(case_id=str(case.get("id", "?")))
             rep.failures.append(f"falha ao chamar o agente: {exc}")
@@ -74,6 +109,12 @@ def main() -> int:
     parser.add_argument("--case", dest="only", default=None, help="roda so um caso pelo id")
     parser.add_argument("--json", action="store_true", help="saida em JSON")
     parser.add_argument("--timeout", type=float, default=180.0)
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=float(os.environ.get("EVAL_CASE_DELAY", "6")),
+        help="segundos entre casos (2a camada de proteção de cota; padrão 6)",
+    )
     parser.add_argument("--agent-url", default=os.environ.get("AGENT_URL", ""))
     args = parser.parse_args()
 
@@ -81,7 +122,7 @@ def main() -> int:
         parser.error("defina AGENT_URL no ambiente ou passe --agent-url")
 
     dataset = load_dataset(Path(args.dataset))
-    reports = run(args.agent_url, dataset, only=args.only, timeout=args.timeout)
+    reports = run(args.agent_url, dataset, only=args.only, timeout=args.timeout, delay=args.delay)
 
     if args.json:
         print(

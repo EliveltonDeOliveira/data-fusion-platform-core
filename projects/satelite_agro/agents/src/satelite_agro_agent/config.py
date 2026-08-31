@@ -9,6 +9,12 @@ from dataclasses import dataclass
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 # host/porta reais vêm de MCP_URL no ambiente
 DEFAULT_MCP_URL = "http://mcp:8000/mcp"
+# O provedor gratuito tem cota apertada por minuto. O agente segura as chamadas
+# ao modelo abaixo desse teto (token bucket local), pra nunca estourar o limite —
+# vale pra produção e pros testes de ponta a ponta. Deixe folga: o teto real do
+# provedor é maior, mas o loop ReAct faz várias chamadas por pergunta.
+DEFAULT_MAX_RPM = 10
+DEFAULT_MAX_RETRIES = 3
 
 
 @dataclass(frozen=True)
@@ -18,6 +24,8 @@ class Settings:
     mcp_url: str = DEFAULT_MCP_URL
     temperature: float = 0.0
     request_timeout: float = 60.0
+    max_rpm: int = DEFAULT_MAX_RPM
+    max_retries: int = DEFAULT_MAX_RETRIES
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -28,4 +36,17 @@ class Settings:
             gemini_api_key=key,
             model=os.environ.get("GEMINI_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL,
             mcp_url=os.environ.get("MCP_URL", DEFAULT_MCP_URL).strip() or DEFAULT_MCP_URL,
+            max_rpm=_positive_int("GEMINI_MAX_RPM", DEFAULT_MAX_RPM),
+            max_retries=_positive_int("GEMINI_MAX_RETRIES", DEFAULT_MAX_RETRIES),
         )
+
+
+def _positive_int(env: str, default: int) -> int:
+    raw = os.environ.get(env, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default

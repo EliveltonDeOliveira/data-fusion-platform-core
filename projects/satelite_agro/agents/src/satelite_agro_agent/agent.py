@@ -65,6 +65,22 @@ async def load_tools(settings: Settings) -> list[BaseTool]:
     return await client.get_tools()
 
 
+def build_rate_limiter(settings: Settings):
+    """Token bucket local: segura as chamadas ao modelo abaixo de `max_rpm`.
+
+    O provedor gratuito corta em poucas dezenas de requisições por minuto e o
+    loop ReAct faz várias chamadas por pergunta. O limiter bloqueia até liberar
+    uma vaga — assim nem produção nem os testes de ponta a ponta estouram a cota.
+    """
+    from langchain_core.rate_limiters import InMemoryRateLimiter
+
+    return InMemoryRateLimiter(
+        requests_per_second=settings.max_rpm / 60.0,
+        check_every_n_seconds=0.1,
+        max_bucket_size=1,  # sem rajada: teto rígido
+    )
+
+
 def build_model(settings: Settings) -> BaseChatModel:
     from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -73,7 +89,8 @@ def build_model(settings: Settings) -> BaseChatModel:
         google_api_key=settings.gemini_api_key,
         temperature=settings.temperature,
         timeout=settings.request_timeout,
-        max_retries=2,
+        max_retries=settings.max_retries,
+        rate_limiter=build_rate_limiter(settings),
     )
 
 

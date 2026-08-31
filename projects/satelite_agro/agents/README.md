@@ -10,6 +10,14 @@ preenche número. O `system_prompt` (`agent.py`) carrega as regras: informativo,
 nunca prescritivo; não inventa valor; repassa as `notes` da tool; sem previsão
 do futuro; escopo Rio Grande do Sul.
 
+## Cota do modelo
+
+O provedor gratuito corta em poucas dezenas de requisições por minuto e o loop
+ReAct faz várias chamadas por pergunta. O agente segura as chamadas ao modelo
+abaixo desse teto com um token bucket local (`InMemoryRateLimiter`), então
+nem produção nem os testes de ponta a ponta estouram a cota. Ajuste por
+ambiente: `GEMINI_MAX_RPM` (padrão 10), `GEMINI_MAX_RETRIES` (padrão 3).
+
 ## Testes
 
 ```sh

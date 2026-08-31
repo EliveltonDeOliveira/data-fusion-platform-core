@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from satelite_agro_agent.agent import SYSTEM_PROMPT
-from satelite_agro_agent.config import DEFAULT_MCP_URL, DEFAULT_MODEL, Settings
+from satelite_agro_agent.agent import SYSTEM_PROMPT, build_rate_limiter
+from satelite_agro_agent.config import (
+    DEFAULT_MAX_RPM,
+    DEFAULT_MCP_URL,
+    DEFAULT_MODEL,
+    Settings,
+)
 
 
 @pytest.mark.parametrize(
@@ -58,3 +63,24 @@ def test_settings_override_modelo(monkeypatch):
 def test_default_nunca_e_pro():
     assert "flash-lite" in DEFAULT_MODEL
     assert "pro" not in DEFAULT_MODEL.lower()
+
+
+def test_rate_limiter_respeita_o_teto():
+    s = Settings(gemini_api_key="k", max_rpm=12)
+    rl = build_rate_limiter(s)
+    assert rl.requests_per_second == pytest.approx(12 / 60.0)
+    # sem rajada: teto rigido
+    assert rl.max_bucket_size == 1
+
+
+def test_max_rpm_do_ambiente(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("GEMINI_MAX_RPM", "8")
+    assert Settings.from_env().max_rpm == 8
+
+
+@pytest.mark.parametrize("bad", ["", "0", "-3", "abc"])
+def test_max_rpm_invalido_cai_no_default(monkeypatch, bad):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("GEMINI_MAX_RPM", bad)
+    assert Settings.from_env().max_rpm == DEFAULT_MAX_RPM
