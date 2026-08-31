@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim AS base
+# libexpat1: GDAL (embutido no wheel do rasterio) precisa em runtime.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libexpat1 \
+ && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /usr/local/bin/uv
 ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_PYTHON_DOWNLOADS=never
 WORKDIR /app

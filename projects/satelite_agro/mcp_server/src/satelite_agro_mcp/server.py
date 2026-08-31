@@ -13,7 +13,7 @@ from mcp.server.mcpserver import MCPServer
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse
 
-from . import weather
+from . import land_use, weather
 from .cache import Cache
 from .weather import Granularity
 
@@ -66,6 +66,56 @@ async def get_weather_trend(
         variables,
         cache=_cache,
     )
+    return result.model_dump(mode="json")
+
+
+_LAND_USE_SUMMARY_DESC = """\
+Composição de uso e cobertura da terra (MapBiomas Coleção 11) de uma região do
+Rio Grande do Sul (escopo piloto), por área em hectares. Fonte: dado anual
+pré-agregado (1985-2025) lido do banco local. Determinístico, sem LLM.
+Informativo: entrega composição + contexto histórico, nunca recomendação.
+
+Parâmetros:
+- region: município do RS ("Santa Maria", "Porto Alegre"), "região de X" (resolve
+  para o município X), ou o estado ("RS", "Rio Grande do Sul"). Fora do RS ou nome
+  não reconhecido -> available=false com a explicação em notes, sem número
+  inventado. Não há buffer de vizinhos nem cálculo zonal ao vivo.
+- year: ano entre 1985 e 2025. Padrão 2025. Fora da faixa -> available=false.
+- level: nível da legenda hierárquica, 1 a 4. Padrão 2. Sempre explícito: a
+  consulta agrega no nível pedido e faz "carry down" para o nível mais profundo
+  disponível em cada classe. Nunca agrega/desagrega em silêncio.
+
+Retorno: available, location (município ou estado, com geocode), year, level,
+total_area_ha, classes (code, label, area_ha, area_pct, ordenado por área) e
+notes. Sempre repasse as notes ao usuário."""
+
+_LAND_USE_POINT_DESC = """\
+Classe de uso e cobertura da terra (MapBiomas Coleção 11) em um ponto do Rio
+Grande do Sul, por leitura de 1 pixel (~30 m) do raster do RS. Determinístico,
+sem LLM. Informativo, nunca recomendação.
+
+Parâmetros:
+- lat, lon: coordenadas em graus decimais (EPSG:4326). Ponto fora do RS -> pixel
+  sem observação -> available=false com a explicação, sem chute.
+- year: só 2025 tem raster recortado. Outro ano -> available=false apontando
+  get_land_use_summary.
+- level: nível da legenda, 1 a 4. Padrão 2. Mesmo "carry down" do summary.
+
+Retorno: available, point, year, level, class_id, code, label (no nível pedido),
+name_pt (classe da folha), hierarchy (level_1..4) e notes. Repasse as notes."""
+
+
+@mcp.tool(name="get_land_use_summary", description=_LAND_USE_SUMMARY_DESC)
+async def get_land_use_summary(region: str, year: int = 2025, level: int = 2) -> dict:
+    """Adapta `land_use.get_land_use_summary` para a camada MCP."""
+    result = await land_use.get_land_use_summary(region, year, level)
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(name="get_land_use_at_point", description=_LAND_USE_POINT_DESC)
+async def get_land_use_at_point(lat: float, lon: float, year: int = 2025, level: int = 2) -> dict:
+    """Adapta `land_use.get_land_use_at_point` para a camada MCP."""
+    result = await land_use.get_land_use_at_point(lat, lon, year, level)
     return result.model_dump(mode="json")
 
 

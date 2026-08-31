@@ -55,3 +55,28 @@ async def test_call_tool_fora_do_rs_nao_inventa(geo):
     assert data["available"] is False
     assert data["series"] == []
     assert any("fora do escopo" in n.lower() for n in data["notes"])
+
+
+async def test_land_use_tools_registradas_com_schema():
+    tools = {t.name: t for t in await mcp.list_tools()}
+
+    summary = tools["get_land_use_summary"]
+    assert set(summary.input_schema["properties"]) == {"region", "year", "level"}
+    assert summary.input_schema["properties"]["level"]["default"] == 2
+
+    point = tools["get_land_use_at_point"]
+    assert set(point.input_schema["properties"]) == {"lat", "lon", "year", "level"}
+    assert point.input_schema["properties"]["year"]["default"] == 2025
+
+
+async def test_land_use_sem_banco_nao_quebra(monkeypatch):
+    # sem DATABASE_URL no ambiente -> a tool responde available=false com a
+    # explicação em notes, nunca um erro de protocolo nem um número.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    result = await mcp.call_tool("get_land_use_summary", {"region": "Santa Maria"})
+
+    assert not result.is_error
+    data = _payload(result)
+    assert data["available"] is False
+    assert data["classes"] == []
+    assert data["notes"]
