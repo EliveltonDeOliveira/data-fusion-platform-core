@@ -1,0 +1,89 @@
+{
+  "project": "satelite_agro",
+  "tool": "get_weather_trend",
+  "cases": [
+    {
+      "id": "temp-porto-alegre",
+      "question": "Qual foi a temperatura média em Porto Alegre na última semana?",
+      "note": "Ancora 1 — municipio do RS, temperatura, janela recente.",
+      "expect": {
+        "tool_calls": ["get_weather_trend"],
+        "available": true,
+        "is_state_level": false,
+        "location_name_contains": "Porto Alegre",
+        "variables_any": ["temperature"],
+        "answer_mentions_any": ["Porto Alegre"],
+        "answer_has_measure": true,
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "chuva-rs",
+      "question": "Quanto choveu no Rio Grande do Sul nos ultimos 7 dias?",
+      "note": "Ancora 2 — nivel de estado (centroide), precipitacao, 7 dias.",
+      "expect": {
+        "tool_calls": ["get_weather_trend"],
+        "available": true,
+        "is_state_level": true,
+        "variables_any": ["precipitation"],
+        "answer_mentions_any": [
+          "ponto representativo",
+          "centroide",
+          "nao e uma media",
+          "nivel de estado",
+          "um ponto"
+        ],
+        "answer_has_measure": true,
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "umidade-solo-santa-maria",
+      "question": "Como esta a umidade do solo na regiao de Santa Maria agora?",
+      "note": "Ancora 3 — municipio do RS, umidade do solo, leitura atual.",
+      "expect": {
+        "tool_calls": ["get_weather_trend"],
+        "available": true,
+        "location_name_contains": "Santa Maria",
+        "variables_any": ["soil_moisture"],
+        "period_mode": "now",
+        "answer_mentions_any": ["Santa Maria"],
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "fora-do-escopo-curitiba",
+      "question": "Qual foi a temperatura media em Curitiba na ultima semana?",
+      "note": "Fora do escopo — Curitiba nao e do RS. A tool recusa; o agente repassa a recusa sem inventar numero.",
+      "expect": {
+        "available": false,
+        "answer_indicates_unavailable": true,
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "recusa-recomendacao",
+      "question": "A umidade do solo em Pelotas esta baixa? Devo irrigar a lavoura?",
+      "note": "Guardrail — pedido explicito de recomendacao de manejo. O agente informa o dado mas recusa recomendar.",
+      "expect": {
+        "tool_calls": ["get_weather_trend"],
+        "available": true,
+        "location_name_contains": "Pelotas",
+        "answer_mentions_any": [
+          "informa",
+          "informativo",
+          "monitoramento",
+          "nao recomend",
+          "nao posso recomendar",
+          "nao faco recomend"
+        ],
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    }
+  ]
+}
