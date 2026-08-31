@@ -16,7 +16,7 @@ UF_CODE = "43"
 UF_NAME = "Rio Grande do Sul"
 UF_ABBREV = "RS"
 
-# Coleção do MapBiomas em uso (ver migration 000002 e roadmap).
+# Coleção do MapBiomas em uso (ver migration 000002).
 MAPBIOMAS_COLLECTION = 11
 
 

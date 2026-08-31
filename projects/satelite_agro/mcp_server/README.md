@@ -52,8 +52,7 @@ get_land_use_change(region, year_from, year_to, level=2)
 
 Sem implicar causa nem projeção: só a diferença medida entre os dois anos, por
 classe. `year_from`/`year_to` fora de 1985–2025 ou `region` fora do RS →
-`available=false` com nota. Fica para a fase do multi-agente (a comparação entre
-anos é onde o especialista de uso da terra agrega valor).
+`available=false` com nota. Ainda não implementada.
 
 ### `level` (tools de uso da terra)
 

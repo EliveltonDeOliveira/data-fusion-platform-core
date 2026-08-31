@@ -68,9 +68,9 @@ async def load_tools(settings: Settings) -> list[BaseTool]:
 def build_rate_limiter(settings: Settings):
     """Token bucket local: segura as chamadas ao modelo abaixo de `max_rpm`.
 
-    O provedor gratuito corta em poucas dezenas de requisições por minuto e o
-    loop ReAct faz várias chamadas por pergunta. O limiter bloqueia até liberar
-    uma vaga — assim nem produção nem os testes de ponta a ponta estouram a cota.
+    O provedor de LLM limita requisições por minuto e o loop ReAct faz várias
+    chamadas por pergunta. O limiter bloqueia até liberar uma vaga — assim nem
+    produção nem os testes de ponta a ponta estouram esse limite.
     """
     from langchain_core.rate_limiters import InMemoryRateLimiter
 

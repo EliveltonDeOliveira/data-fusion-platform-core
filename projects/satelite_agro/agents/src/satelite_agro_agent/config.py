@@ -5,14 +5,14 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-# Fase 1: um agente, modelo direto. Flash-Lite — nunca Pro.
+# Um agente, modelo direto. Flash-Lite — nunca Pro.
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 # host/porta reais vêm de MCP_URL no ambiente
 DEFAULT_MCP_URL = "http://mcp:8000/mcp"
-# O provedor gratuito tem cota apertada por minuto. O agente segura as chamadas
-# ao modelo abaixo desse teto (token bucket local), pra nunca estourar o limite —
-# vale pra produção e pros testes de ponta a ponta. Deixe folga: o teto real do
-# provedor é maior, mas o loop ReAct faz várias chamadas por pergunta.
+# O provedor de LLM limita requisições por minuto. O agente segura as chamadas
+# ao modelo abaixo de um teto (token bucket local), pra não estourar esse limite
+# — vale pra produção e pros testes de ponta a ponta. O loop ReAct faz várias
+# chamadas por pergunta, então configure com folga.
 DEFAULT_MAX_RPM = 10
 DEFAULT_MAX_RETRIES = 3
 

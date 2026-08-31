@@ -458,7 +458,7 @@ async def get_land_use_at_point(
 
 
 # --------------------------------------------------------------------------- #
-# get_land_use_change - PLANEJADA (fase do multi-agente), não registrada ainda.
+# get_land_use_change - PLANEJADA, ainda não registrada como tool.
 #
 #   get_land_use_change(region, year_from, year_to, level=2) -> {
 #       available, location, year_from, year_to, level,

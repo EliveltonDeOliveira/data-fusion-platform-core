@@ -1,9 +1,9 @@
 """Resolução de região para o escopo piloto: Rio Grande do Sul.
 
-Usa a API de geocoding do próprio Open-Meteo (nome -> coordenadas). A Fase 1
-trabalha em cima de um ponto representativo — agregação zonal por área
-(recorte com malha do IBGE) é da Fase 2. Por isso a resposta sempre diz qual
-ponto foi usado e se ele é o centroide do estado.
+Usa a API de geocoding do próprio Open-Meteo (nome -> coordenadas). Trabalha em
+cima de um ponto representativo — a agregação zonal por área (recorte com malha
+do IBGE) fica noutra camada. Por isso a resposta sempre diz qual ponto foi
+usado e se ele é o centroide do estado.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ async def resolve_region(query: str, client: OpenMeteoClient) -> RegionResolutio
             notes=[
                 "consulta a nível de estado: os valores são de um ponto "
                 "representativo do RS (centroide aproximado), não uma média "
-                "por área. Recorte por município/estado vem em fase posterior."
+                "por área. O recorte por município/estado é feito noutra camada."
             ],
         )
 

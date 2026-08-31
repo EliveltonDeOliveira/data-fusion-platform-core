@@ -8,9 +8,9 @@ So stdlib. Envia cada pergunta a `POST {AGENT_URL}/ask`, aplica as checagens de
 `checks.py` e imprime um relatorio. Sai com codigo 1 se algum caso falhar — da
 pra usar em CI. Consome cota do provedor de LLM do agente.
 
-Cota: o agente ja segura as chamadas ao modelo abaixo do teto do provedor
+Cota: o agente ja segura as chamadas ao modelo abaixo do limite do provedor
 (token bucket local). `--delay` espaca os casos como 2a camada e o runner recua
-uma vez se ainda assim vier 'cota estourada'. `--delay 0` desliga o espacamento.
+uma vez se ainda assim vier 'limite estourado'. `--delay 0` desliga o espacamento.
 """
 
 from __future__ import annotations
@@ -28,9 +28,9 @@ import checks
 
 _HERE = Path(__file__).parent
 
-# O agente ja segura as chamadas ao modelo abaixo do teto do provedor gratuito.
+# O agente ja segura as chamadas ao modelo abaixo do limite do provedor de LLM.
 # Isto aqui e a segunda camada: espacar os casos e recuar se mesmo assim vier um
-# "cota estourada", pra um `run.py` sem supervisao nao queimar o orcamento.
+# "limite estourado", pra um `run.py` sem acompanhamento nao esbarrar na cota.
 _RATE_LIMIT_MARKERS = ("RESOURCE_EXHAUSTED", "429", "quota", "rate limit")
 _BACKOFF_SECONDS = 65.0
 

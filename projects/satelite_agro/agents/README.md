@@ -1,6 +1,6 @@
 # satelite_agro / agents
 
-Agente do Projeto 1. Um único agente nesta fase (sem Supervisor): grafo
+Agente do Projeto 1. Um único agente (sem orquestrador): grafo
 [LangGraph](https://langchain-ai.github.io/langgraph/) via
 `langchain.agents.create_agent` + Gemini, com as tools servidas pelo
 `mcp_server` do projeto.
@@ -12,11 +12,11 @@ do futuro; escopo Rio Grande do Sul.
 
 ## Cota do modelo
 
-O provedor gratuito corta em poucas dezenas de requisições por minuto e o loop
-ReAct faz várias chamadas por pergunta. O agente segura as chamadas ao modelo
-abaixo desse teto com um token bucket local (`InMemoryRateLimiter`), então
-nem produção nem os testes de ponta a ponta estouram a cota. Ajuste por
-ambiente: `GEMINI_MAX_RPM` (padrão 10), `GEMINI_MAX_RETRIES` (padrão 3).
+O provedor de LLM limita requisições por minuto e o loop ReAct faz várias
+chamadas por pergunta. O agente segura as chamadas ao modelo abaixo de um teto
+com um token bucket local (`InMemoryRateLimiter`), então nem produção nem os
+testes de ponta a ponta estouram esse limite. Ajuste por ambiente:
+`GEMINI_MAX_RPM` (padrão 10), `GEMINI_MAX_RETRIES` (padrão 3).
 
 ## Testes
 
