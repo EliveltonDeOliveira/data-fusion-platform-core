@@ -1,0 +1,32 @@
+# Segredos
+.env
+.env.*
+*.pem
+*.key
+
+# Arquivos de dado
+*.tif
+*.tiff
+*.gpkg
+*.shp
+*.nc
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Go
+/shared/gateway/gateway
+*.test
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
