@@ -6,8 +6,11 @@ dourado (`cases/<projeto>.json`) e o JSON da resposta do agente, devolvem um
 
 O contrato da resposta (ver o servico do agente):
     {"answer": str, "model": str, "tool_calls": [str], "data": [<payload da tool>]}
-`data` traz os payloads crus de `get_weather_trend` (deterministicos, nao texto
-do modelo) — e a fonte de verdade para checar se um numero citado foi inventado.
+`data` traz os payloads crus das tools (deterministicos, nao texto do modelo) —
+a fonte de verdade para checar se um numero ou uma classe citada foi inventada.
+As checagens sao agnosticas de tool: `get_weather_trend` (clima) e
+`get_land_use_summary` / `get_land_use_at_point` (uso da terra) usam o mesmo
+`evaluate`, cada `expect` liga so os checadores que fazem sentido.
 """
 
 from __future__ import annotations
@@ -66,13 +69,27 @@ class Report:
 # helpers sobre o payload da tool
 
 
+def tool_payloads(response: dict[str, Any]) -> list[dict[str, Any]]:
+    """Todos os payloads de tool (dicts com `available`), de qualquer tool do projeto."""
+    return [
+        item
+        for item in response.get("data") or []
+        if isinstance(item, dict) and "available" in item
+    ]
+
+
 def weather_payloads(response: dict[str, Any]) -> list[dict[str, Any]]:
-    """Payloads que parecem de `get_weather_trend` (tem `available` + `region_query`)."""
-    out = []
-    for item in response.get("data") or []:
-        if isinstance(item, dict) and "available" in item and "region_query" in item:
-            out.append(item)
-    return out
+    """Payloads que parecem de `get_weather_trend` (`region_query` + série/granularidade)."""
+    return [
+        p
+        for p in tool_payloads(response)
+        if "region_query" in p and ("series" in p or "granularity" in p)
+    ]
+
+
+def land_use_payloads(response: dict[str, Any]) -> list[dict[str, Any]]:
+    """Payloads das tools de uso da terra (`get_land_use_summary` / `_at_point`)."""
+    return [p for p in tool_payloads(response) if "classes" in p or "class_id" in p]
 
 
 def _first_available(payloads: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -109,6 +126,11 @@ def _data_numbers(payloads: list[dict[str, Any]]) -> set[float]:
                 add(pt.get("value"))
         for v in (p.get("current") or {}).values():
             add(v)
+        # uso da terra: percentuais e áreas por classe
+        add(p.get("total_area_ha"))
+        for row in p.get("classes") or []:
+            add(row.get("area_ha"))
+            add(row.get("area_pct"))
     return vals
 
 
@@ -154,7 +176,8 @@ def _check_location(expect: dict, payloads: list[dict], rep: Report) -> None:
 
     if "is_state_level" in expect:
         want = expect["is_state_level"]
-        got = bool(loc.get("is_state_level"))
+        # clima: campo `is_state_level`; uso da terra: `location.kind == "state"`
+        got = bool(loc.get("is_state_level")) or loc.get("kind") == "state"
         if got != want:
             rep.failures.append(f"is_state_level: esperava {want}, veio {got}")
 
@@ -163,6 +186,42 @@ def _check_location(expect: dict, payloads: list[dict], rep: Report) -> None:
         name = norm(str(loc.get("name", "")))
         if norm(sub) not in name:
             rep.failures.append(f"location.name {loc.get('name')!r} nao contem {sub!r}")
+
+
+def _check_year(expect: dict, payloads: list[dict], rep: Report) -> None:
+    want = expect.get("year")
+    if want is None:
+        return
+    got = (_first_available(payloads) or {}).get("year")
+    if got != want:
+        rep.failures.append(f"year: esperava {want}, veio {got}")
+
+
+def _check_level(expect: dict, payloads: list[dict], rep: Report) -> None:
+    want = expect.get("level")
+    if want is None:
+        return
+    got = (_first_available(payloads) or {}).get("level")
+    if got != want:
+        rep.failures.append(f"level: esperava {want}, veio {got}")
+
+
+def _check_class_grounding(expect: dict, answer: str, payloads: list[dict], rep: Report) -> None:
+    """A resposta cita ao menos uma classe de uso da terra que veio no dado da tool."""
+    if not expect.get("classes_grounded"):
+        return
+    text = norm(answer)
+    labels: list[str] = []
+    for p in payloads:
+        for row in p.get("classes") or []:
+            if row.get("label"):
+                labels.append(norm(str(row["label"])))
+        if p.get("label"):  # get_land_use_at_point
+            labels.append(norm(str(p["label"])))
+        if p.get("name_pt"):
+            labels.append(norm(str(p["name_pt"])))
+    if labels and not any(lbl in text for lbl in labels):
+        rep.failures.append("nenhuma classe citada na resposta bate com o dado da tool")
 
 
 def _check_variables(expect: dict, payloads: list[dict], rep: Report) -> None:
@@ -245,7 +304,7 @@ def evaluate(case: dict[str, Any], response: dict[str, Any]) -> Report:
     rep = Report(case_id=str(case.get("id", "?")))
     expect = case.get("expect") or {}
     answer = str(response.get("answer", ""))
-    payloads = weather_payloads(response)
+    payloads = tool_payloads(response)
 
     if not answer.strip():
         rep.failures.append("resposta vazia")
@@ -253,6 +312,8 @@ def evaluate(case: dict[str, Any], response: dict[str, Any]) -> Report:
     _check_tool_calls(expect, response, rep)
     _check_available(expect, payloads, rep)
     _check_location(expect, payloads, rep)
+    _check_year(expect, payloads, rep)
+    _check_level(expect, payloads, rep)
     _check_variables(expect, payloads, rep)
     _check_period_mode(expect, payloads, rep)
     _check_answer_mentions(expect, answer, rep)
@@ -260,4 +321,5 @@ def evaluate(case: dict[str, Any], response: dict[str, Any]) -> Report:
     _check_unavailable_wording(expect, answer, rep)
     _check_no_prescription(expect, answer, rep)
     _check_grounded(expect, answer, payloads, rep)
+    _check_class_grounding(expect, answer, payloads, rep)
     return rep

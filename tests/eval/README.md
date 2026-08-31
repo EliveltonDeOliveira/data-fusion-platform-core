@@ -4,14 +4,16 @@ Dataset dourado por projeto — perguntas de referencia com as propriedades que 
 resposta do agente precisa ter, para checagem deterministica de regressao.
 
 - `cases/<projeto>.json` — as perguntas e o que se espera de cada uma.
-- `checks.py` — as checagens (funcoes puras): a tool certa foi chamada, a regiao
-  resolveu, nao ha numero sem lastro na tool, o texto nao recomenda manejo.
+- `checks.py` — as checagens (funcoes puras), agnosticas de tool: a tool certa
+  foi chamada, a regiao/ano/nivel resolveu, nao ha numero nem classe sem lastro
+  na tool, o texto nao recomenda manejo.
 - `run.py` — envia cada pergunta a um agente no ar e aplica as checagens.
 - `test_checks.py` — testes das checagens, offline.
 
-O dataset de `satelite_agro` cobre as tres perguntas-ancora da fatia inicial,
-uma consulta fora do escopo (deve ser recusada sem inventar numero) e um pedido
-explicito de recomendacao (deve ser recusado).
+O dataset de `satelite_agro` cobre clima (3 perguntas-ancora + fora do escopo +
+pedido de recomendacao) e uso da terra (composicao por municipio e por estado,
+consulta por ponto, ano sem cobertura, fora do escopo, pedido de recomendacao).
+Cada `expect` liga so os checadores que fazem sentido para aquela tool.
 
 ## Rodar
 

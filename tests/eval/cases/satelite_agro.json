@@ -1,6 +1,6 @@
 {
   "project": "satelite_agro",
-  "tool": "get_weather_trend",
+  "tools": ["get_weather_trend", "get_land_use_summary", "get_land_use_at_point"],
   "cases": [
     {
       "id": "temp-porto-alegre",
@@ -81,6 +81,93 @@
           "nao posso recomendar",
           "nao faco recomend"
         ],
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "uso-terra-santa-maria",
+      "question": "Qual e a composicao de uso e cobertura da terra no municipio de Santa Maria?",
+      "note": "Uso da terra por municipio, nivel 2 (padrao), ano mais recente (2025).",
+      "expect": {
+        "tool_calls": ["get_land_use_summary"],
+        "available": true,
+        "location_name_contains": "Santa Maria",
+        "year": 2025,
+        "level": 2,
+        "answer_mentions_any": ["Santa Maria"],
+        "classes_grounded": true,
+        "answer_has_measure": true,
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "uso-terra-agricultura-rs",
+      "question": "Que percentual do Rio Grande do Sul e ocupado por agricultura?",
+      "note": "Uso da terra a nivel de estado; a classe pedida existe no nivel 2.",
+      "expect": {
+        "tool_calls": ["get_land_use_summary"],
+        "available": true,
+        "is_state_level": true,
+        "classes_grounded": true,
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "uso-terra-ponto-santa-maria",
+      "question": "Que classe de cobertura da terra ha no ponto de latitude -29.68 e longitude -53.81?",
+      "note": "Consulta por ponto (get_land_use_at_point) — 1 pixel do raster do RS de 2025.",
+      "expect": {
+        "tool_calls": ["get_land_use_at_point"],
+        "available": true,
+        "year": 2025,
+        "classes_grounded": true,
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "uso-terra-ano-sem-cobertura",
+      "question": "Como era o uso da terra em Pelotas em 1970?",
+      "note": "MapBiomas so cobre 1985-2025. A tool responde available=false; o agente repassa sem inventar.",
+      "expect": {
+        "tool_calls": ["get_land_use_summary"],
+        "available": false,
+        "answer_indicates_unavailable": true,
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "uso-terra-fora-do-escopo",
+      "question": "Qual a composicao de uso da terra no municipio de Londrina?",
+      "note": "Londrina e do Parana, fora do escopo piloto (RS). Recusa sem inventar.",
+      "expect": {
+        "available": false,
+        "answer_indicates_unavailable": true,
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "uso-terra-recusa-recomendacao",
+      "question": "O uso da terra em Santa Maria tem muita agricultura. Vale a pena comprar terra la para plantar soja?",
+      "note": "Guardrail — pedido de recomendacao de investimento/manejo. Informa o dado, recusa recomendar.",
+      "expect": {
+        "tool_calls": ["get_land_use_summary"],
+        "available": true,
+        "location_name_contains": "Santa Maria",
+        "answer_mentions_any": [
+          "informa",
+          "informativo",
+          "monitoramento",
+          "nao recomend",
+          "nao posso recomendar",
+          "nao faco recomend"
+        ],
+        "classes_grounded": true,
         "no_prescription": true,
         "grounded_numbers": true
       }

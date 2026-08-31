@@ -27,6 +27,38 @@ _WEATHER_OK = {
 }
 
 
+_LAND_SUMMARY_OK = {
+    "region_query": "Santa Maria",
+    "available": True,
+    "location": {"name": "Santa Maria", "kind": "municipality", "geocode": "4316907"},
+    "year": 2025,
+    "level": 2,
+    "total_area_ha": 178020.5,
+    "classes": [
+        {"code": "3.2", "label": "Agricultura", "area_ha": 63933.6, "area_pct": 35.91},
+        {"code": "2.1", "label": "Formação Campestre", "area_ha": 52185.2, "area_pct": 29.31},
+    ],
+}
+_LAND_STATE_OK = {
+    "region_query": "RS",
+    "available": True,
+    "location": {"name": "Rio Grande do Sul", "kind": "state"},
+    "year": 2025,
+    "level": 2,
+    "classes": [{"code": "3.2", "label": "Agricultura", "area_ha": 8.6e6, "area_pct": 32.3}],
+}
+_LAND_POINT_OK = {
+    "available": True,
+    "point": {"lat": -29.68, "lon": -53.81},
+    "year": 2025,
+    "level": 2,
+    "class_id": 24,
+    "code": "4.2",
+    "label": "Área Urbanizada",
+    "name_pt": "Área Urbanizada",
+}
+
+
 def _resp(answer: str, *, tools=("get_weather_trend",), data=(_WEATHER_OK,)) -> dict:
     return {"answer": answer, "model": "x", "tool_calls": list(tools), "data": list(data)}
 
@@ -85,6 +117,73 @@ class StructuralTests(unittest.TestCase):
         bad = checks.evaluate(case, _resp("Curitiba e uma cidade bonita.", data=()))
         self.assertTrue(ok.ok, ok.failures)
         self.assertFalse(bad.ok)
+
+
+class LandUseTests(unittest.TestCase):
+    def test_summary_municipio_ok(self):
+        case = {
+            "id": "lu1",
+            "expect": {
+                "tool_calls": ["get_land_use_summary"],
+                "available": True,
+                "location_name_contains": "Santa Maria",
+                "year": 2025,
+                "level": 2,
+                "classes_grounded": True,
+                "grounded_numbers": True,
+            },
+        }
+        resp = _resp(
+            "Em Santa Maria (2025), a Agricultura ocupa 35,9% da area; "
+            "a Formacao Campestre, 29,3%.",
+            tools=("get_land_use_summary",),
+            data=(_LAND_SUMMARY_OK,),
+        )
+        rep = checks.evaluate(case, resp)
+        self.assertTrue(rep.ok, rep.failures)
+
+    def test_estado_via_kind(self):
+        case = {"id": "lu2", "expect": {"is_state_level": True}}
+        resp = _resp("...", tools=("get_land_use_summary",), data=(_LAND_STATE_OK,))
+        self.assertTrue(checks.evaluate(case, resp).ok)
+
+    def test_classe_inventada_falha(self):
+        case = {"id": "lu3", "expect": {"classes_grounded": True}}
+        resp = _resp(
+            "O ponto e coberto por Floresta Ombrofila Densa.",
+            tools=("get_land_use_at_point",),
+            data=(_LAND_POINT_OK,),
+        )
+        self.assertFalse(checks.evaluate(case, resp).ok)
+
+    def test_classe_grounded_ponto_passa(self):
+        case = {"id": "lu4", "expect": {"classes_grounded": True, "year": 2025}}
+        resp = _resp(
+            "No ponto (-29.68, -53.81) a classe e Area Urbanizada (2025).",
+            tools=("get_land_use_at_point",),
+            data=(_LAND_POINT_OK,),
+        )
+        self.assertTrue(checks.evaluate(case, resp).ok)
+
+    def test_percentual_inventado_falha(self):
+        case = {"id": "lu5", "expect": {"grounded_numbers": True}}
+        resp = _resp(
+            "A Agricultura ocupa 80% da area.",
+            tools=("get_land_use_summary",),
+            data=(_LAND_SUMMARY_OK,),
+        )
+        self.assertFalse(checks.evaluate(case, resp).ok)
+
+    def test_ano_divergente_falha(self):
+        case = {"id": "lu6", "expect": {"year": 2020}}
+        resp = _resp("...", tools=("get_land_use_summary",), data=(_LAND_SUMMARY_OK,))
+        self.assertFalse(checks.evaluate(case, resp).ok)
+
+    def test_payload_classifiers(self):
+        resp = _resp("x", tools=(), data=(_WEATHER_OK, _LAND_SUMMARY_OK, _LAND_POINT_OK))
+        self.assertEqual(len(checks.weather_payloads(resp)), 1)
+        self.assertEqual(len(checks.land_use_payloads(resp)), 2)
+        self.assertEqual(len(checks.tool_payloads(resp)), 3)
 
 
 class DatasetTests(unittest.TestCase):

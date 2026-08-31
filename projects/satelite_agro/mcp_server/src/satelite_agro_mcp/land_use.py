@@ -455,3 +455,19 @@ async def get_land_use_at_point(
             f"1 pixel (~30 m); a classe da folha é '{row['name_pt']}'."
         ],
     )
+
+
+# --------------------------------------------------------------------------- #
+# get_land_use_change - PLANEJADA (fase do multi-agente), não registrada ainda.
+#
+#   get_land_use_change(region, year_from, year_to, level=2) -> {
+#       available, location, year_from, year_to, level,
+#       classes: [ {code, label, area_from_ha, area_to_ha,
+#                   delta_ha, delta_pct_points} ],   # ordenado por |delta_ha|
+#       source, notes }
+#
+# Mesmo dado pré-agregado do summary (`land_use_municipality`), lido nos dois
+# anos e diferenciado por classe no nível pedido. Só a variação medida - nunca
+# causa nem projeção. year_* fora de 1985-2025 ou region fora do RS ->
+# available=false com nota. Reaproveita `_resolve_region`, `_label_sql`,
+# `_code_sql`, `_validate_level` e a faixa MIN_YEAR/MAX_YEAR deste módulo.

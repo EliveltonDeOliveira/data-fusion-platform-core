@@ -17,6 +17,8 @@ from satelite_agro_agent.config import DEFAULT_MCP_URL, DEFAULT_MODEL, Settings
         "notes",
         "análise causal",
         "monitoramento",
+        "MapBiomas",
+        "nível 1 a 4",
     ],
 )
 def test_system_prompt_carrega_as_regras(trecho):
