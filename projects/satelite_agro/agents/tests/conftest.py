@@ -21,12 +21,14 @@ class StubAgent:
         self._result = result or {}
         self._raises = raises
         self.role_models = {"supervisor": "m-a", "clima": "m-b", "uso_terra": "m-a"}
+        self.last_inputs: dict[str, Any] | None = None
         if model_pool is not None:
             self.model_pool = model_pool
         if tools_by_name is not None:
             self.tools_by_name = tools_by_name
 
-    async def ainvoke(self, _inputs: dict) -> dict:
+    async def ainvoke(self, inputs: dict) -> dict:
+        self.last_inputs = inputs
         if self._raises is not None:
             raise self._raises
         return self._result

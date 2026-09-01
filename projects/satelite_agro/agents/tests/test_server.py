@@ -61,6 +61,50 @@ def test_ask_data_vazio():
     assert r.json()["specialists"] == []
 
 
+def test_ask_repassa_historico_pro_grafo():
+    agent = StubAgent(_state_ok())
+    client = _install(agent)
+    r = client.post(
+        "/ask",
+        json={
+            "question": "e em 2020?",
+            "history": [
+                {"role": "user", "content": "uso da terra em Santa Maria em 2019?"},
+                {"role": "assistant", "content": "39% agricultura em 2019."},
+            ],
+        },
+    )
+    assert r.status_code == 200
+    assert agent.last_inputs["history"] == [
+        {"role": "user", "content": "uso da terra em Santa Maria em 2019?"},
+        {"role": "assistant", "content": "39% agricultura em 2019."},
+    ]
+
+
+def test_ask_sem_historico_manda_lista_vazia():
+    agent = StubAgent(_state_ok())
+    client = _install(agent)
+    r = client.post("/ask", json={"question": "temp em porto alegre?"})
+    assert r.status_code == 200
+    assert agent.last_inputs["history"] == []
+
+
+def test_ask_historico_com_role_invalido_e_rejeitado():
+    client = _install(StubAgent(_state_ok()))
+    r = client.post(
+        "/ask",
+        json={"question": "oi", "history": [{"role": "sistema", "content": "x"}]},
+    )
+    assert r.status_code == 422
+
+
+def test_ask_historico_alem_do_limite_e_rejeitado():
+    client = _install(StubAgent(_state_ok()))
+    historico = [{"role": "user", "content": f"pergunta {i}"} for i in range(13)]
+    r = client.post("/ask", json={"question": "oi", "history": historico})
+    assert r.status_code == 422
+
+
 def test_ask_sem_agente_pronto_503():
     client = TestClient(server.app)  # sem lifespan → _state vazio
     r = client.post("/ask", json={"question": "oi"})

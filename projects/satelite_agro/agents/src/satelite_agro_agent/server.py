@@ -32,8 +32,19 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="satelite-agro-agent", lifespan=lifespan)
 
 
+class HistoryTurn(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=2000)
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
+    # Turnos anteriores desta conversa, mandados pelo cliente a cada chamada —
+    # nunca guardados aqui (ver regra de "sem persistência de dado de
+    # usuário" do projeto). Só dá contexto pro Supervisor resolver referência
+    # ("e em 2020?"); a pergunta atual continua sendo o texto que o guardrail
+    # e a síntese usam.
+    history: list[HistoryTurn] = Field(default_factory=list, max_length=12)
 
 
 class AskResponse(BaseModel):
@@ -162,7 +173,8 @@ async def ask(req: AskRequest) -> AskResponse:
     _state["in_flight"] = _state.get("in_flight", 0) + 1
     try:
         with route_run(settings.mlflow_tracking_uri, role_models=role_models) as trace:
-            result = await agent.ainvoke({"question": req.question})
+            history = [h.model_dump() for h in req.history]
+            result = await agent.ainvoke({"question": req.question, "history": history})
             specialists = list(result.get("specialists") or [])
             tool_calls = list(result.get("tool_calls") or [])
             trace.log_routing(specialists=specialists, tool_calls=tool_calls)

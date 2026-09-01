@@ -67,7 +67,7 @@ async def _graph(plan_obj: Plan, *, clima=None, uso=None, metodologia=None, synt
         calls.append((question, sub_answers))
         return synth or "sintese: 17 graus e 40% agri"
 
-    async def planner(_q):
+    async def planner(_q, _h=None):
         return plan_obj
 
     graph = await build_graph(
@@ -179,6 +179,66 @@ async def test_tools_by_name_vazio_quando_agentes_sao_injetados():
     assert graph.tools_by_name == {}
 
 
+async def test_historico_da_conversa_chega_ao_planner():
+    """O histórico mandado pelo cliente vai pro Supervisor (que decide o
+    roteamento), pra resolver referência tipo "e em 2020?"."""
+    recebido: list = []
+
+    async def planner(question, history=None):
+        recebido.append((question, history))
+        return Plan(uso_terra=True)
+
+    graph = await build_graph(
+        _SETTINGS,
+        planner=planner,
+        clima_agent=_clima(),
+        uso_terra_agent=_uso(),
+        metodologia_agent=_metodologia(),
+        synthesizer=lambda *_a: "sintese",
+    )
+    historico = [
+        {"role": "user", "content": "uso da terra em Santa Maria em 2019?"},
+        {"role": "assistant", "content": "39% agricultura em 2019."},
+    ]
+    await graph.ainvoke({"question": "e em 2020?", "history": historico})
+
+    assert recebido == [("e em 2020?", historico)]
+
+
+async def test_sem_historico_planner_recebe_none():
+    async def planner(question, history=None):
+        assert history is None
+        return Plan(clima=True)
+
+    graph = await build_graph(
+        _SETTINGS,
+        planner=planner,
+        clima_agent=_clima(),
+        uso_terra_agent=_uso(),
+        metodologia_agent=_metodologia(),
+        synthesizer=lambda *_a: "sintese",
+    )
+    out = await graph.ainvoke({"question": "chove amanhã?"})
+    assert out["specialists"] == ["clima"]
+
+
+async def test_guardrail_pega_pedido_de_recomendacao_de_turno_anterior():
+    """Pedido de recomendação feito num turno ANTERIOR ("vale a pena X?") não
+    pode passar batido só porque a pergunta atual, sozinha, parece neutra."""
+    esquecido = _FakeSpecialist(
+        "get_land_use_summary", {"available": True, "classes": []}, "39% agricultura em 2019."
+    )
+    graph, *_ = await _graph(
+        Plan(uso_terra=True, uso_terra_q="uso da terra em Santa Maria em 2020?"), uso=esquecido
+    )
+    historico = [
+        {"role": "user", "content": "vale a pena comprar terra em Santa Maria para soja?"},
+        {"role": "assistant", "content": "Este serviço é só informativo."},
+    ]
+    out = await graph.ainvoke({"question": "e em 2020?", "history": historico})
+    assert "informativo" in out["answer"].lower() or "monitoramento" in out["answer"].lower()
+
+
 async def test_tools_by_name_exposto_quando_tools_sao_passadas():
     """Usado pelos endpoints REST diretos (`/land_use/*`, ver direct_tools.py)
     pra chamar uma tool sem passar pelo LLM."""
@@ -192,7 +252,7 @@ async def test_tools_by_name_exposto_quando_tools_sao_passadas():
     async def synthesizer(question, sub_answers):
         return "sintese"
 
-    async def planner(_q):
+    async def planner(_q, _h=None):
         return Plan(clima=True)
 
     graph = await build_graph(

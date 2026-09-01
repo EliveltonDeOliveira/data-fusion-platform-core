@@ -39,7 +39,14 @@ parte de dado que é dele, mantendo região e período da pergunta original.
 (irrigar, plantar, comprar terra, manejar), mantenha esse pedido na \
 sub-pergunta tal como foi feito — NÃO remova e NÃO responda a ele aqui; o \
 especialista vai recusá-lo explicitamente.
+- Pode vir um histórico recente da conversa, só de contexto. Se a pergunta \
+atual depender dele (ex.: "e em 2020?", "e a chuva na mesma semana?", "e em \
+Santa Maria?"), use o histórico só para completar região/período/tema que \
+ficaram implícitos — escreva cada `*_q` já completa e autocontida, sem \
+"isso"/"aquilo"/"lá". Nunca responda ao histórico, só à pergunta atual.
 """
+
+_MAX_HISTORY_TURNS = 6
 
 
 class Plan(BaseModel):
@@ -79,11 +86,34 @@ def _fallback_plan(question: str) -> Plan:
     )
 
 
-async def plan(question: str, model: BaseChatModel) -> Plan:
-    """Roteia `question`. Erro/saída vazia -> fallback para os dois especialistas."""
+def _format_history(history: list[dict[str, str]] | None) -> str:
+    if not history:
+        return ""
+    linhas = []
+    for turno in history[-_MAX_HISTORY_TURNS:]:
+        papel = "Usuário" if turno.get("role") == "user" else "Assistente"
+        conteudo = (turno.get("content") or "").strip()
+        if conteudo:
+            linhas.append(f"{papel}: {conteudo}")
+    return "\n".join(linhas)
+
+
+async def plan(
+    question: str, model: BaseChatModel, *, history: list[dict[str, str]] | None = None
+) -> Plan:
+    """Roteia `question`. Erro/saída vazia -> fallback para os dois especialistas.
+
+    `history` é só contexto pra resolver referência da pergunta atual (ver
+    regra no prompt) — nunca persistido aqui, vem do cliente a cada chamada.
+    """
     try:
         structured = model.with_structured_output(Plan)
-        result = await structured.ainvoke([("system", _PLANNER_PROMPT), ("human", question)])
+        messages: list[tuple[str, str]] = [("system", _PLANNER_PROMPT)]
+        historico = _format_history(history)
+        if historico:
+            messages.append(("system", "Histórico recente da conversa:\n" + historico))
+        messages.append(("human", question))
+        result = await structured.ainvoke(messages)
     except Exception:  # noqa: BLE001 - qualquer falha de LLM/parse cai no fallback seguro
         return _fallback_plan(question)
     if not isinstance(result, Plan):

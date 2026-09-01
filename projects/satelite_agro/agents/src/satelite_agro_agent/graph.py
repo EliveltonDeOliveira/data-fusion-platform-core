@@ -45,6 +45,7 @@ _NO_SPECIALIST_ANSWER = (
 
 class GraphState(TypedDict, total=False):
     question: str
+    history: list[dict[str, str]]
     plan: Plan
     specialists: list[str]
     clima: dict[str, Any]
@@ -67,7 +68,7 @@ async def _run_specialist(agent: Any, question: str) -> dict[str, Any]:
 
 def _build_nodes(planner, clima_agent, uso_terra_agent, metodologia_agent, synthesizer):
     async def supervisor(state: GraphState) -> dict[str, Any]:
-        p: Plan = await planner(state["question"])
+        p: Plan = await planner(state["question"], state.get("history"))
         specs = p.specialists
         out: dict[str, Any] = {"plan": p, "specialists": specs}
         if not specs:
@@ -100,7 +101,13 @@ def _build_nodes(planner, clima_agent, uso_terra_agent, metodologia_agent, synth
             answer = await synthesizer(
                 state["question"], {k: v["sub_answer"] for k, v in results.items()}
             )
-        answer = ensure_recommendation_refusal(state["question"], answer)
+        # guardrail olha a pergunta ATUAL + o que o usuário disse antes na
+        # conversa — um pedido de recomendação não pode passar batido só por
+        # ter sido feito num turno anterior ("e nesse caso, vale a pena?").
+        pedido_anterior = " ".join(
+            t.get("content", "") for t in (state.get("history") or []) if t.get("role") == "user"
+        )
+        answer = ensure_recommendation_refusal(f"{pedido_anterior} {state['question']}", answer)
         return {"answer": answer, "data": payloads, "tool_calls": calls}
 
     return supervisor, clima, uso_terra, metodologia, synthesis
@@ -145,8 +152,8 @@ async def build_graph(
     if planner is None:
         supervisor_model = pool.for_role("supervisor")
 
-        async def planner(question: str) -> Plan:
-            return await plan(question, supervisor_model)
+        async def planner(question: str, history: list[dict[str, str]] | None = None) -> Plan:
+            return await plan(question, supervisor_model, history=history)
 
     if synthesizer is None:
         synthesis_model = pool.for_role("synthesis")

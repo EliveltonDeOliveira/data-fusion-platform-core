@@ -72,3 +72,56 @@ async def test_plan_fallback_quando_parse_falha(bad):
     assert out.clima_q == "pergunta qualquer"
     assert out.uso_terra_q == "pergunta qualquer"
     assert out.metodologia_q == "pergunta qualquer"
+
+
+class _RecordingStructured:
+    def __init__(self, result, sink: list):
+        self._result = result
+        self._sink = sink
+
+    async def ainvoke(self, messages):
+        self._sink.append(messages)
+        return self._result
+
+
+class _RecordingModel:
+    def __init__(self, result):
+        self.sink: list = []
+        self._result = result
+
+    def with_structured_output(self, schema):
+        assert schema is Plan
+        return _RecordingStructured(self._result, self.sink)
+
+
+async def test_plan_sem_historico_nao_manda_bloco_extra():
+    model = _RecordingModel(Plan(clima=True))
+    await plan("chove amanhã?", model)
+    assert len(model.sink[0]) == 2  # só system (regras) + human (pergunta)
+
+
+async def test_plan_com_historico_manda_bloco_de_contexto():
+    plan_esperado = Plan(uso_terra=True, uso_terra_q="uso da terra em Santa Maria em 2020?")
+    model = _RecordingModel(plan_esperado)
+    historico = [
+        {"role": "user", "content": "uso da terra em Santa Maria em 2019?"},
+        {"role": "assistant", "content": "39% agricultura em 2019."},
+    ]
+    await plan("e em 2020?", model, history=historico)
+
+    messages = model.sink[0]
+    assert len(messages) == 3
+    assert messages[-1] == ("human", "e em 2020?")
+    bloco_historico = messages[1][1]
+    assert "Santa Maria em 2019" in bloco_historico
+    assert "39% agricultura" in bloco_historico
+
+
+async def test_plan_historico_so_usa_os_ultimos_turnos():
+    model = _RecordingModel(Plan(clima=True))
+    historico = [{"role": "user", "content": f"pergunta {i}"} for i in range(10)]
+    await plan("agora?", model, history=historico)
+
+    bloco_historico = model.sink[0][1][1]
+    assert "pergunta 0" not in bloco_historico  # fora da janela dos últimos 6
+    assert "pergunta 9" in bloco_historico
