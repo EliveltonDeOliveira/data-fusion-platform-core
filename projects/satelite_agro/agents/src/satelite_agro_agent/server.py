@@ -88,8 +88,8 @@ async def status() -> StatusResponse:
     )
 
 
-async def _call_land_use_tool(name: str, **kwargs: Any) -> dict[str, Any]:
-    """Chama uma tool de uso da terra direto, sem LLM — ver `direct_tools.py`."""
+async def _call_tool_direct(name: str, **kwargs: Any) -> dict[str, Any]:
+    """Chama uma tool MCP direto, sem LLM — ver `direct_tools.py`."""
     agent = _state.get("agent")
     tools_by_name = getattr(agent, "tools_by_name", None)
     if agent is None or not tools_by_name:
@@ -106,14 +106,14 @@ async def _call_land_use_tool(name: str, **kwargs: Any) -> dict[str, Any]:
 
 @app.get("/land_use/summary")
 async def land_use_summary(region: str, year: int = 2025, level: int = 2) -> dict[str, Any]:
-    return await _call_land_use_tool("get_land_use_summary", region=region, year=year, level=level)
+    return await _call_tool_direct("get_land_use_summary", region=region, year=year, level=level)
 
 
 @app.get("/land_use/at_point")
 async def land_use_at_point(
     lat: float, lon: float, year: int = 2025, level: int = 2
 ) -> dict[str, Any]:
-    return await _call_land_use_tool(
+    return await _call_tool_direct(
         "get_land_use_at_point", lat=lat, lon=lon, year=year, level=level
     )
 
@@ -122,9 +122,16 @@ async def land_use_at_point(
 async def land_use_change(
     region: str, year_from: int, year_to: int, level: int = 2
 ) -> dict[str, Any]:
-    return await _call_land_use_tool(
+    return await _call_tool_direct(
         "get_land_use_change", region=region, year_from=year_from, year_to=year_to, level=level
     )
+
+
+@app.get("/region/point")
+async def region_point(query: str) -> dict[str, Any]:
+    """Resolve uma região do RS pra um ponto (lat/lon), sem LLM — só apoio de
+    UI (dar zoom/centralizar mapa), reusa o mesmo geocoding do clima."""
+    return await _call_tool_direct("resolve_region_point", region=query)
 
 
 @app.post("/ask", response_model=AskResponse)

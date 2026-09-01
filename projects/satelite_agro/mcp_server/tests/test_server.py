@@ -103,3 +103,19 @@ async def test_land_use_change_sem_banco_nao_quebra(monkeypatch):
     assert data["available"] is False
     assert data["classes"] == []
     assert data["notes"]
+
+
+async def test_resolve_region_point_tool_registrada_com_schema():
+    tools = {t.name: t for t in await mcp.list_tools()}
+    tool = tools["resolve_region_point"]
+    assert set(tool.input_schema["properties"]) == {"region"}
+
+
+async def test_resolve_region_point_tool_devolve_lat_lon(geo):
+    geo(PORTO_ALEGRE)
+    result = await mcp.call_tool("resolve_region_point", {"region": "Porto Alegre"})
+
+    assert not result.is_error
+    data = _payload(result)
+    assert data["available"] is True
+    assert abs(data["location"]["latitude"] + 30.03306) < 1e-6

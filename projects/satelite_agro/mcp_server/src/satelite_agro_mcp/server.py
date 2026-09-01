@@ -13,7 +13,7 @@ from mcp.server.mcpserver import MCPServer
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse
 
-from . import land_use, methodology, weather
+from . import land_use, methodology, regions, weather
 from .cache import Cache
 from .weather import Granularity
 
@@ -170,6 +170,28 @@ Sem corpus populado ou sem credencial de embedding -> available=false."""
 async def search_mapbiomas_methodology(query: str, top_k: int = 5) -> dict:
     """Adapta `methodology.search_methodology` para a camada MCP."""
     result = await methodology.search_methodology(query, top_k, cache=_methodology_cache)
+    return result.model_dump(mode="json")
+
+
+_REGION_POINT_DESC = """\
+Resolve uma região do Rio Grande do Sul (município ou o estado) para um ponto
+representativo (lat/lon) — mesmo geocoding usado por get_weather_trend, sem
+nenhum dado novo. Determinístico, sem LLM. Uso interno de apoio (ex.: dar
+zoom/centralizar um mapa) — não traz clima nem uso da terra; para isso use
+get_weather_trend ou get_land_use_summary/at_point.
+
+Parâmetros:
+- region: município do RS ou o estado ("RS", "Rio Grande do Sul"). Fora do RS
+  ou não encontrado -> available=false com a explicação em notes.
+
+Retorno: available, location (nome, lat/lon, se é ponto representativo do
+estado) e notes."""
+
+
+@mcp.tool(name="resolve_region_point", description=_REGION_POINT_DESC)
+async def resolve_region_point(region: str) -> dict:
+    """Adapta `regions.resolve_region_point` para a camada MCP."""
+    result = await regions.resolve_region_point(region, cache=_cache)
     return result.model_dump(mode="json")
 
 

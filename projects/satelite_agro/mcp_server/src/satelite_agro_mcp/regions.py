@@ -12,6 +12,7 @@ import unicodedata
 
 from pydantic import BaseModel
 
+from .cache import Cache, make_key
 from .openmeteo import OpenMeteoClient
 
 ADMIN1_RS = "Rio Grande do Sul"
@@ -123,3 +124,23 @@ async def resolve_region(query: str, client: OpenMeteoClient) -> RegionResolutio
         longitude=chosen["longitude"],
     )
     return RegionResolution(available=True, location=loc)
+
+
+async def resolve_region_point(query: str, *, cache: Cache | None = None) -> RegionResolution:
+    """Mesmo `resolve_region`, mas cuida do ciclo de vida do `OpenMeteoClient`
+    e cacheia o resultado — pensado pra ser chamado isolado (não dentro de
+    `get_weather_trend`), por quem só precisa de um ponto pra centralizar um
+    mapa. Coordenada de cidade não muda; o cache é o mesmo Valkey de
+    `get_weather_trend` (TTL curto é só o que já existe, sem custo extra)."""
+    cache_key = make_key("region_point", query.strip().lower())
+    if cache is not None:
+        hit = await cache.get_json(cache_key)
+        if hit is not None:
+            return RegionResolution.model_validate(hit)
+
+    async with OpenMeteoClient() as client:
+        result = await resolve_region(query, client)
+
+    if cache is not None:
+        await cache.set_json(cache_key, result.model_dump(mode="json"))
+    return result

@@ -272,6 +272,21 @@ def test_land_use_nunca_bate_no_ask_nem_no_in_flight():
     assert server._state.get("in_flight", 0) == 0
 
 
+def test_region_point_repassa_o_payload_da_tool():
+    tool = _FakeTool({"available": True, "location": {"latitude": -30.03, "longitude": -51.23}})
+    client = _install(StubAgent(_state_ok(), tools_by_name={"resolve_region_point": tool}))
+    r = client.get("/region/point", params={"query": "Porto Alegre"})
+    assert r.status_code == 200
+    assert r.json()["location"]["latitude"] == -30.03
+    assert tool.calls == [{"region": "Porto Alegre"}]
+
+
+def test_region_point_sem_agente_pronto_503():
+    client = TestClient(server.app)  # sem lifespan -> _state vazio
+    r = client.get("/region/point", params={"query": "RS"})
+    assert r.status_code == 503
+
+
 def test_healthz():
     client = _install(StubAgent(_state_ok()))
     assert client.get("/healthz").json() == {"status": "ok"}
