@@ -12,12 +12,14 @@ import sys
 
 from . import db
 from .config import UF_NAME, Settings
+from .embeddings import embed_texts, to_vector_literal
 from .land_use import LandUseStats, stream_land_use
 from .legend import validate_legend
 from .municipios import fetch_municipios
+from .rag_corpus import build_corpus, documents_in
 from .raster import clip_raster, fetch_uf_boundary
 
-STEPS = ("legend", "municipios", "land-use", "raster")
+STEPS = ("legend", "municipios", "land-use", "raster", "rag-corpus")
 
 
 def _log(msg: str) -> None:
@@ -104,11 +106,30 @@ def step_raster(settings: Settings) -> None:
     )
 
 
+def step_rag_corpus(settings: Settings) -> None:
+    if not settings.gemini_api_key:
+        raise SystemExit("GEMINI_API_KEY é obrigatório para a etapa rag-corpus (embedding)")
+
+    chunks = build_corpus(settings.raw_dir)
+    if not chunks:
+        raise SystemExit("nenhum trecho gerado pro corpus RAG")
+
+    vectors = embed_texts((content for _, _, content in chunks), api_key=settings.gemini_api_key)
+    rows = (
+        (doc, idx, content, to_vector_literal(vec))
+        for (doc, idx, content), vec in zip(chunks, vectors, strict=True)
+    )
+    with db.connect(settings.database_url) as conn:
+        written = db.replace_rag_chunks(conn, rows)
+    _log(f"  corpus RAG: {written} trechos de {len(documents_in(chunks))} documentos")
+
+
 RUNNERS = {
     "legend": step_legend,
     "municipios": step_municipios,
     "land-use": step_land_use,
     "raster": step_raster,
+    "rag-corpus": step_rag_corpus,
 }
 
 

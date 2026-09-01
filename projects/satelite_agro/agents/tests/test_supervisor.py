@@ -50,6 +50,13 @@ async def test_plan_roteia_dois_especialistas():
     assert out.specialists == ["clima", "uso_terra"]
 
 
+async def test_plan_roteia_metodologia():
+    model = _FakeModel(Plan(metodologia=True, metodologia_q="como e definida a pastagem?"))
+    out = await plan("como a MapBiomas define a classe pastagem?", model)
+    assert out.specialists == ["metodologia"]
+    assert out.metodologia_q == "como e definida a pastagem?"
+
+
 async def test_plan_nenhum_especialista():
     model = _FakeModel(Plan())
     out = await plan("bom dia", model)
@@ -60,7 +67,8 @@ async def test_plan_nenhum_especialista():
 async def test_plan_fallback_quando_parse_falha(bad):
     model = _FakeModel(bad)
     out = await plan("pergunta qualquer", model)
-    # fallback seguro: os dois especialistas, com a pergunta original
-    assert out.specialists == ["clima", "uso_terra"]
+    # fallback seguro: todos os especialistas, com a pergunta original
+    assert out.specialists == ["clima", "uso_terra", "metodologia"]
     assert out.clima_q == "pergunta qualquer"
     assert out.uso_terra_q == "pergunta qualquer"
+    assert out.metodologia_q == "pergunta qualquer"

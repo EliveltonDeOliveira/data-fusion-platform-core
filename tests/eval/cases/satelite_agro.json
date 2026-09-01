@@ -4,7 +4,8 @@
     "get_weather_trend",
     "get_land_use_summary",
     "get_land_use_at_point",
-    "get_land_use_change"
+    "get_land_use_change",
+    "search_mapbiomas_methodology"
   ],
   "cases": [
     {
@@ -216,6 +217,38 @@
         "available": true,
         "no_prescription": true,
         "grounded_numbers": true
+      }
+    },
+    {
+      "id": "metodologia-pastagem",
+      "question": "Como a MapBiomas define e classifica a classe pastagem?",
+      "note": "Pergunta de metodologia pura — corpus RAG (Pasture-Appendix), 1 especialista.",
+      "expect": {
+        "tool_calls": ["search_mapbiomas_methodology"],
+        "specialists": ["metodologia"],
+        "available": true,
+        "no_prescription": true
+      }
+    },
+    {
+      "id": "metodologia-acuracia",
+      "question": "Qual e a acuracia estimada do mapeamento de uso e cobertura da terra da MapBiomas?",
+      "note": "Cobre o apendice de Accuracy Assessment. Numero de acuracia deve vir citado do trecho, nao inventado.",
+      "expect": {
+        "tool_calls": ["search_mapbiomas_methodology"],
+        "specialists": ["metodologia"],
+        "available": true,
+        "no_prescription": true
+      }
+    },
+    {
+      "id": "correlacao-uso-terra-metodologia-pampa",
+      "question": "Qual a composicao de uso da terra do Rio Grande do Sul e como o bioma Pampa e tratado na classificacao da MapBiomas?",
+      "note": "Combina uso da terra (numero) com metodologia (Pampa-Appendix) — 2 especialistas diferentes dos pares testados ate aqui.",
+      "expect": {
+        "specialists": ["metodologia", "uso_terra"],
+        "available": true,
+        "no_prescription": true
       }
     }
   ]

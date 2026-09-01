@@ -10,7 +10,7 @@ from __future__ import annotations
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, Field
 
-SPECIALISTS = ("clima", "uso_terra")
+SPECIALISTS = ("clima", "uso_terra", "metodologia")
 
 _PLANNER_PROMPT = """\
 Você roteia uma pergunta para especialistas de dado público do Rio Grande do Sul.
@@ -22,13 +22,17 @@ evapotranspiração. Dado atual e histórico (Open-Meteo). Nunca previsão.
 - uso_terra: composição e mudança de uso e cobertura da terra por área \
 (MapBiomas, anual 1985-2025) — agricultura, pastagem, floresta, campo, área \
 urbana, água etc., inclusive variação entre dois anos.
+- metodologia: como a MapBiomas classifica cada classe, critério usado, \
+avaliação de acurácia/confiabilidade do dado — pergunta sobre o MÉTODO, não \
+sobre um número de uma região. Ex.: "como é definida a classe pastagem?", \
+"quão confiável é esse mapeamento?".
 
 Regras:
-- Marque `clima` e/ou `uso_terra` conforme a pergunta.
-- Se a pergunta relaciona as duas dimensões (ex.: "como o clima recente se \
-compara ao uso da terra"), marque as DUAS.
+- Marque `clima` e/ou `uso_terra` e/ou `metodologia` conforme a pergunta.
+- Se a pergunta relaciona duas ou mais dimensões (ex.: "como o clima recente se \
+compara ao uso da terra"), marque todas as que se aplicam.
 - Se não toca nenhuma (saudação, pergunta sobre o próprio serviço, tema fora de \
-clima e uso da terra), não marque nenhuma.
+clima, uso da terra e metodologia), não marque nenhuma.
 - Para cada especialista marcado, escreva em `*_q` a sub-pergunta focada na \
 parte de dado que é dele, mantendo região e período da pergunta original.
 - Se a pergunta original também pedir recomendação, orientação ou decisão \
@@ -43,9 +47,15 @@ class Plan(BaseModel):
     uso_terra: bool = Field(
         default=False, description="a pergunta precisa do especialista de uso da terra"
     )
+    metodologia: bool = Field(
+        default=False, description="a pergunta precisa do especialista de metodologia MapBiomas"
+    )
     clima_q: str | None = Field(default=None, description="sub-pergunta focada só no clima")
     uso_terra_q: str | None = Field(
         default=None, description="sub-pergunta focada só no uso da terra"
+    )
+    metodologia_q: str | None = Field(
+        default=None, description="sub-pergunta focada só na metodologia"
     )
     rationale: str = Field(default="", description="uma frase sobre a decisão de roteamento")
 
@@ -61,8 +71,10 @@ def _fallback_plan(question: str) -> Plan:
     return Plan(
         clima=True,
         uso_terra=True,
+        metodologia=True,
         clima_q=question,
         uso_terra_q=question,
+        metodologia_q=question,
         rationale="fallback",
     )
 

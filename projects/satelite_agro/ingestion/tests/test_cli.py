@@ -19,7 +19,12 @@ def test_only_preserva_ordem_canonica():
 
 
 def test_skip():
-    assert _selected_steps(_ns(skip=["raster"])) == ["legend", "municipios", "land-use"]
+    assert _selected_steps(_ns(skip=["raster"])) == [
+        "legend",
+        "municipios",
+        "land-use",
+        "rag-corpus",
+    ]
 
 
 def test_main_exige_database_url(monkeypatch):

@@ -5,8 +5,10 @@ from langchain_core.tools import tool
 from satelite_agro_agent.agent import SYSTEM_PROMPT
 from satelite_agro_agent.specialists import (
     CLIMA_TOOLS,
+    METODOLOGIA_TOOLS,
     USO_TERRA_TOOLS,
     build_clima_specialist,
+    build_metodologia_specialist,
     build_uso_terra_specialist,
 )
 
@@ -35,6 +37,12 @@ def get_land_use_change(region: str, year_from: int, year_to: int) -> str:
     return "{}"
 
 
+@tool
+def search_mapbiomas_methodology(query: str) -> str:
+    """metodologia."""
+    return "{}"
+
+
 _TOOLS = {
     t.name: t
     for t in (
@@ -42,6 +50,7 @@ _TOOLS = {
         get_land_use_summary,
         get_land_use_at_point,
         get_land_use_change,
+        search_mapbiomas_methodology,
     )
 }
 
@@ -58,6 +67,8 @@ class _FakeModel:
 
 def test_listas_de_tools_nao_se_cruzam():
     assert set(CLIMA_TOOLS).isdisjoint(USO_TERRA_TOOLS)
+    assert set(CLIMA_TOOLS).isdisjoint(METODOLOGIA_TOOLS)
+    assert set(USO_TERRA_TOOLS).isdisjoint(METODOLOGIA_TOOLS)
     assert "get_land_use_change" in USO_TERRA_TOOLS
 
 
@@ -67,7 +78,9 @@ def test_prompts_herdam_guardrails_e_tem_foco():
     assert SYSTEM_PROMPT in (SYSTEM_PROMPT + specialists._CLIMA_FOCO)
     assert "SEU FOCO" in specialists._CLIMA_FOCO
     assert "SEU FOCO" in specialists._USO_TERRA_FOCO
+    assert "SEU FOCO" in specialists._METODOLOGIA_FOCO
     assert "get_land_use_change" in specialists._USO_TERRA_FOCO
+    assert "source_document" in specialists._METODOLOGIA_FOCO
 
 
 def test_build_especialistas_seleciona_o_subconjunto(monkeypatch):
@@ -83,8 +96,10 @@ def test_build_especialistas_seleciona_o_subconjunto(monkeypatch):
 
     build_clima_specialist(_FakeModel(), _TOOLS)
     build_uso_terra_specialist(_FakeModel(), _TOOLS)
+    build_metodologia_specialist(_FakeModel(), _TOOLS)
 
-    clima_call, uso_call = captured["calls"]
+    clima_call, uso_call, metodologia_call = captured["calls"]
     assert clima_call["tools"] == ["get_weather_trend"]
     assert set(uso_call["tools"]) == set(USO_TERRA_TOOLS)
+    assert metodologia_call["tools"] == ["search_mapbiomas_methodology"]
     assert "monitoramento" in clima_call["prompt"]

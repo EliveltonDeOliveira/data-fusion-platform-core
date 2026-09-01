@@ -11,7 +11,7 @@ def _settings(**kw) -> Settings:
 def test_alterna_modelos_por_papel():
     pool = ModelPool(_settings(models=("m-a", "m-b")))
     rm = pool.role_models
-    assert [rm[r] for r in ROLES] == ["m-a", "m-b", "m-a", "m-b"]
+    assert [rm[r] for r in ROLES] == ["m-a", "m-b", "m-a", "m-b", "m-a"]
 
 
 def test_um_modelo_so_todos_os_papeis():
@@ -21,7 +21,7 @@ def test_um_modelo_so_todos_os_papeis():
 
 def test_rate_limiter_compartilhado_por_modelo():
     pool = ModelPool(_settings(models=("m-a", "m-b")))
-    # supervisor e uso_terra -> m-a; clima e synthesis -> m-b
+    # supervisor, uso_terra e synthesis -> m-a; clima e metodologia -> m-b
     assert pool._limiter("m-a") is pool._limiter("m-a")
     assert pool._limiter("m-a") is not pool._limiter("m-b")
 

@@ -65,11 +65,27 @@ def replace_land_use(conn: psycopg.Connection, rows: Iterable[tuple[str, int, in
     return written
 
 
+def replace_rag_chunks(conn: psycopg.Connection, rows: Iterable[tuple[str, int, str, str]]) -> int:
+    """rows: (source_document, chunk_index, content, embedding_literal). Substitui tudo."""
+    written = 0
+    with conn.cursor() as cur:
+        cur.execute("TRUNCATE satelite_agro.rag_chunk")
+        with cur.copy(
+            "COPY satelite_agro.rag_chunk "
+            "(source_document, chunk_index, content, embedding) FROM STDIN"
+        ) as copy:
+            for row in rows:
+                copy.write_row(row)
+                written += 1
+    return written
+
+
 def table_count(conn: psycopg.Connection, qualified_table: str) -> int:
     allowed = {
         "satelite_agro.mapbiomas_legend",
         "satelite_agro.ibge_municipio",
         "satelite_agro.land_use_municipality",
+        "satelite_agro.rag_chunk",
     }
     if qualified_table not in allowed:
         raise ValueError(f"tabela não permitida: {qualified_table}")

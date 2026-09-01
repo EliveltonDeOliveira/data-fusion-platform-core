@@ -14,8 +14,9 @@ resposta do agente precisa ter, para checagem deterministica de regressao.
 O dataset de `satelite_agro` cobre clima (3 perguntas-ancora + fora do escopo +
 pedido de recomendacao), uso da terra (composicao por municipio e por estado,
 consulta por ponto, variacao entre dois anos, ano sem cobertura, fora do escopo,
-pedido de recomendacao) e correlacao entre clima e uso da terra (roteamento para
-dois especialistas). Cada `expect` liga so os checadores que fazem sentido.
+pedido de recomendacao), metodologia (busca no corpus RAG dos ATBDs) e
+correlacao entre pares de dimensoes (roteamento para 2+ especialistas). Cada
+`expect` liga so os checadores que fazem sentido.
 
 ## Rodar
 

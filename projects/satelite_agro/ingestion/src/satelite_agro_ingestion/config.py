@@ -31,6 +31,7 @@ class Settings:
     coverage_raster: str
     stats_xlsx: str
     legend_csv: str
+    gemini_api_key: str
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -53,6 +54,7 @@ class Settings:
             legend_csv=os.environ.get(
                 "LEGEND_CSV", "legend_code_mapbiomas_brazil_collection_11.csv"
             ),
+            gemini_api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
         )
 
     def raw(self, name: str) -> Path:

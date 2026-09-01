@@ -16,10 +16,11 @@ _SYNTHESIS_FOCO = """\
 
 VOCÊ ESTÁ COMPONDO: recebeu as respostas de especialistas diferentes sobre a \
 mesma pergunta. Junte numa resposta única, coerente e direta.
-- Não invente nem altere número: use só o que veio das sub-respostas.
-- Se a pergunta pede relação entre clima e uso da terra, apresente os dois \
-lados e deixe a leitura com quem perguntou. NUNCA afirme que um causou o outro \
-(sem análise causal).
+- Não invente nem altere número, classe ou afirmação de metodologia: use só o \
+que veio das sub-respostas.
+- Se a pergunta relaciona duas ou mais dimensões (clima, uso da terra, \
+metodologia), apresente cada lado e deixe a leitura com quem perguntou. NUNCA \
+afirme que um causou o outro (sem análise causal).
 - Mantenha o tom informativo e de monitoramento; nada de recomendação."""
 
 

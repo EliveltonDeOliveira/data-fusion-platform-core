@@ -1,8 +1,10 @@
 # satelite_agro / ingestion
 
-Pipeline determinístico (sem LLM) que lê dado público institucional e grava
+Pipeline determinístico que lê dado público institucional e grava
 pré-agregado no Postgres. Toda agregação espacial pesada acontece aqui, nunca
-numa consulta ao vivo.
+numa consulta ao vivo. Sem raciocínio de LLM em nenhuma etapa — a única
+exceção é `rag-corpus`, que chama um embedding hospedado (não generativo: o
+mesmo texto sempre vira o mesmo vetor) uma vez por trecho.
 
 ## Etapas
 
@@ -12,6 +14,7 @@ numa consulta ao vivo.
 | `municipios` | API de Localidades do IBGE | tabela de municípios do RS |
 | `land-use` | planilha de Estatísticas do MapBiomas (aba `COVERAGE_11`) | área por classe × município × ano (1985–2025); só RS, somada entre biomas, células ≤ 0 omitidas |
 | `raster` | GeoTIFF nacional de cobertura + malha do RS (IBGE) | raster recortado do RS (o nacional não é copiado) |
+| `rag-corpus` | subconjunto de PDFs de metodologia (ATBDs), baixados manualmente | trechos + embedding, gravados no corpus RAG |
 
 Geocodes que o IBGE atribui a corpos d'água (Lagoa dos Patos, Lagoa Mirim) não
 são municípios e são pulados, com contagem reportada.

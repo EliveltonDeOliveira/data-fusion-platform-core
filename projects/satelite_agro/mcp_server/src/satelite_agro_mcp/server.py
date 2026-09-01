@@ -13,7 +13,7 @@ from mcp.server.mcpserver import MCPServer
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse
 
-from . import land_use, weather
+from . import land_use, methodology, weather
 from .cache import Cache
 from .weather import Granularity
 
@@ -27,6 +27,7 @@ mcp = MCPServer(
 )
 
 _cache = Cache.from_env()
+_methodology_cache = Cache.from_env(ttl_env_var="RAG_CACHE_TTL")
 
 _WEATHER_TREND_DESC = """\
 Série climática atual/recente de uma região do Rio Grande do Sul (escopo piloto).
@@ -145,6 +146,30 @@ delta_pct_points; ordenado por |delta_ha|) e notes. Sempre repasse as notes."""
 async def get_land_use_change(region: str, year_from: int, year_to: int, level: int = 2) -> dict:
     """Adapta `land_use.get_land_use_change` para a camada MCP."""
     result = await land_use.get_land_use_change(region, year_from, year_to, level)
+    return result.model_dump(mode="json")
+
+
+_METHODOLOGY_SEARCH_DESC = """\
+Busca por trecho relevante nos ATBDs (documentos de metodologia) da MapBiomas
+Coleção 11 — como a classificação é feita, critérios de cada classe de uso da
+terra, avaliação de acurácia. Fonte: corpus pré-computado (embedding) a partir
+de um subconjunto dos PDFs oficiais. Busca vetorial determinística; não gera
+texto novo. Informativo, nunca recomendação.
+
+Parâmetros:
+- query: a pergunta ou termo de busca, em português ou inglês.
+- top_k: quantos trechos retornar (1 a 10, padrão 5).
+
+Retorno: available, chunks (source_document, content, score de similaridade
+0-1, ordenado do mais relevante), source, notes. Se o melhor score for baixo, a
+nota avisa que o corpus pode não cobrir a pergunta — repasse isso ao usuário.
+Sem corpus populado ou sem credencial de embedding -> available=false."""
+
+
+@mcp.tool(name="search_mapbiomas_methodology", description=_METHODOLOGY_SEARCH_DESC)
+async def search_mapbiomas_methodology(query: str, top_k: int = 5) -> dict:
+    """Adapta `methodology.search_methodology` para a camada MCP."""
+    result = await methodology.search_methodology(query, top_k, cache=_methodology_cache)
     return result.model_dump(mode="json")
 
 

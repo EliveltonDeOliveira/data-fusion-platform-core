@@ -20,10 +20,10 @@ class AsyncRedisLike(Protocol):
     async def set(self, key: str, value: str, ex: int | None = None) -> Any: ...
 
 
-def make_key(*parts: Any) -> str:
+def make_key(*parts: Any, prefix: str = KEY_PREFIX) -> str:
     raw = "|".join(json.dumps(p, sort_keys=True, default=str) for p in parts)
     digest = hashlib.sha1(raw.encode()).hexdigest()  # noqa: S324 - não é uso de segurança
-    return f"{KEY_PREFIX}{digest}"
+    return f"{prefix}{digest}"
 
 
 class Cache:
@@ -37,9 +37,9 @@ class Cache:
         self._ttl = ttl_seconds
 
     @classmethod
-    def from_env(cls) -> Cache:
+    def from_env(cls, *, ttl_env_var: str = "WEATHER_CACHE_TTL") -> Cache:
         url = os.environ.get("VALKEY_URL")
-        ttl = int(os.environ.get("WEATHER_CACHE_TTL", DEFAULT_TTL_SECONDS))
+        ttl = int(os.environ.get(ttl_env_var, DEFAULT_TTL_SECONDS))
         if not url:
             return cls(None, ttl_seconds=ttl)
         from redis.asyncio import from_url

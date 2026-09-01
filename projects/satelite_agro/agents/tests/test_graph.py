@@ -49,9 +49,18 @@ def _uso() -> _FakeSpecialist:
     return _FakeSpecialist("get_land_use_summary", {"available": True, "classes": []}, "40% agri")
 
 
-async def _graph(plan_obj: Plan, *, clima=None, uso=None, synth=None):
+def _metodologia() -> _FakeSpecialist:
+    return _FakeSpecialist(
+        "search_mapbiomas_methodology",
+        {"available": True, "chunks": []},
+        "pastagem é definida por...",
+    )
+
+
+async def _graph(plan_obj: Plan, *, clima=None, uso=None, metodologia=None, synth=None):
     clima = clima or _clima()
     uso = uso or _uso()
+    metodologia = metodologia or _metodologia()
     calls: list = []
 
     async def synthesizer(question, sub_answers):
@@ -66,13 +75,14 @@ async def _graph(plan_obj: Plan, *, clima=None, uso=None, synth=None):
         planner=planner,
         clima_agent=clima,
         uso_terra_agent=uso,
+        metodologia_agent=metodologia,
         synthesizer=synthesizer,
     )
-    return graph, clima, uso, calls
+    return graph, clima, uso, metodologia, calls
 
 
 async def test_um_especialista_nao_chama_sintese():
-    graph, clima, uso, calls = await _graph(Plan(clima=True, clima_q="chuva no RS?"))
+    graph, clima, uso, metodologia, calls = await _graph(Plan(clima=True, clima_q="chuva no RS?"))
     out = await graph.ainvoke({"question": "Quanto choveu no RS?"})
 
     assert out["specialists"] == ["clima"]
@@ -80,12 +90,13 @@ async def test_um_especialista_nao_chama_sintese():
     assert calls == []  # síntese não rodou
     assert clima.seen == ["chuva no RS?"]  # sub-pergunta do plano
     assert uso.seen == []
+    assert metodologia.seen == []
     assert out["tool_calls"] == ["get_weather_trend"]
     assert out["data"] == [{"available": True, "region_query": "x"}]
 
 
 async def test_dois_especialistas_rodam_e_sintese_compoe():
-    graph, _clima, _uso, calls = await _graph(Plan(clima=True, uso_terra=True))
+    graph, *_, calls = await _graph(Plan(clima=True, uso_terra=True))
     out = await graph.ainvoke({"question": "clima e uso da terra em Santa Maria?"})
 
     assert set(out["specialists"]) == {"clima", "uso_terra"}
@@ -97,18 +108,28 @@ async def test_dois_especialistas_rodam_e_sintese_compoe():
     assert len(out["data"]) == 2
 
 
+async def test_tres_especialistas_rodam_e_sintese_compoe():
+    graph, *_, calls = await _graph(Plan(clima=True, uso_terra=True, metodologia=True))
+    out = await graph.ainvoke({"question": "clima, uso da terra e metodologia?"})
+
+    assert set(out["specialists"]) == {"clima", "uso_terra", "metodologia"}
+    assert len(calls) == 1
+    _, sub_answers = calls[0]
+    assert set(sub_answers) == {"clima", "uso_terra", "metodologia"}
+
+
 async def test_nenhum_especialista_responde_direto():
-    graph, clima, uso, calls = await _graph(Plan())
+    graph, clima, uso, metodologia, calls = await _graph(Plan())
     out = await graph.ainvoke({"question": "bom dia"})
 
     assert out["specialists"] == []
     assert "monitoramento" in out["answer"]
     assert calls == []
-    assert clima.seen == [] and uso.seen == []
+    assert clima.seen == [] and uso.seen == [] and metodologia.seen == []
 
 
 async def test_uso_terra_sozinho_usa_subpergunta():
-    graph, _clima, uso, _calls = await _graph(
+    graph, _clima, uso, _metodologia, _calls = await _graph(
         Plan(uso_terra=True, uso_terra_q="uso da terra em Santa Maria em 2020?")
     )
     out = await graph.ainvoke({"question": "algo mais amplo"})
@@ -118,9 +139,37 @@ async def test_uso_terra_sozinho_usa_subpergunta():
     assert out["answer"] == "40% agri"
 
 
+async def test_metodologia_sozinho_usa_subpergunta():
+    graph, *_ = await _graph(
+        Plan(metodologia=True, metodologia_q="como e definida a classe pastagem?")
+    )
+    out = await graph.ainvoke({"question": "algo mais amplo"})
+
+    assert out["specialists"] == ["metodologia"]
+    assert out["tool_calls"] == ["search_mapbiomas_methodology"]
+
+
+async def test_recusa_de_recomendacao_e_reforcada_mesmo_se_o_especialista_esquecer():
+    esquecido = _FakeSpecialist(
+        "get_land_use_summary", {"available": True, "classes": []}, "40% agricultura, sem mais."
+    )
+    graph, *_ = await _graph(
+        Plan(uso_terra=True, uso_terra_q="vale a pena comprar terra para soja?"), uso=esquecido
+    )
+    out = await graph.ainvoke({"question": "Vale a pena comprar terra em Santa Maria para soja?"})
+    assert "informativo" in out["answer"].lower() or "monitoramento" in out["answer"].lower()
+    assert out["answer"].endswith("40% agricultura, sem mais.")
+
+
 async def test_role_models_exposto_no_grafo():
     graph, *_ = await _graph(Plan(clima=True))
-    assert set(graph.role_models) == {"supervisor", "clima", "uso_terra", "synthesis"}
+    assert set(graph.role_models) == {
+        "supervisor",
+        "clima",
+        "uso_terra",
+        "metodologia",
+        "synthesis",
+    }
 
 
 @pytest.mark.parametrize(
@@ -128,6 +177,7 @@ async def test_role_models_exposto_no_grafo():
     [
         (Plan(clima=True), ["clima"]),
         (Plan(uso_terra=True), ["uso_terra"]),
+        (Plan(metodologia=True), ["metodologia"]),
         (Plan(clima=True, uso_terra=True), ["clima", "uso_terra"]),
         (Plan(), []),
     ],

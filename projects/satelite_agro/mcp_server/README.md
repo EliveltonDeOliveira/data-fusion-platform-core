@@ -11,10 +11,11 @@ fica no agente.
 | `get_land_use_summary(region, year, level=2)` | implementada | MapBiomas Coleção 11 (pré-agregado) |
 | `get_land_use_at_point(lat, lon, year, level=2)` | implementada | MapBiomas Coleção 11 (raster do RS) |
 | `get_land_use_change(region, year_from, year_to, level=2)` | implementada | MapBiomas Coleção 11 (pré-agregado) |
+| `search_mapbiomas_methodology(query, top_k=5)` | implementada | ATBDs MapBiomas Coleção 11 (corpus RAG) |
 
-Escopo geográfico de todas: **Rio Grande do Sul** (piloto). Fora dele, ou sem
-dado para a consulta, a tool responde `available=false` com a explicação em
-`notes` — nunca inventa número.
+Escopo geográfico das quatro primeiras: **Rio Grande do Sul** (piloto). Fora
+dele, ou sem dado para a consulta, a tool responde `available=false` com a
+explicação em `notes` — nunca inventa número.
 
 ### `get_weather_trend`
 
@@ -60,6 +61,15 @@ classe. `year_from`/`year_to` fora de 1985–2025, iguais, ou `region` fora do R
 Nível da legenda hierárquica do MapBiomas, `1`–`4`, padrão `2`. Sempre
 explícito: a consulta agrega no nível pedido e faz *carry down* para o nível
 mais profundo disponível em cada classe. Nunca agrega/desagrega em silêncio.
+
+### `search_mapbiomas_methodology`
+
+Busca por similaridade (embedding + pgvector) num corpus pré-computado a
+partir de um subconjunto dos ATBDs oficiais (metodologia, critério de
+classificação, avaliação de acurácia) — não é dado de monitoramento. Cada
+resultado traz o trecho e o documento-fonte; um score baixo no melhor
+resultado vira nota explícita ("o corpus pode não cobrir essa pergunta").
+Corpus vazio ou sem credencial de embedding → `available=false`.
 
 ## Testes
 

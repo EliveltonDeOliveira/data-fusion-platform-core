@@ -1,10 +1,11 @@
 """Pool de modelos por papel.
 
-Quatro papéis no grafo — `supervisor`, `clima`, `uso_terra`, `synthesis` —
-recebem um modelo cada, alternando a lista de `settings.models` em ordem. Cada
-nome de modelo distinto tem um `InMemoryRateLimiter` compartilhado entre os
-papéis que o usam: o provedor conta requisições por minuto por modelo, então
-alternar dois modelos equivalentes distribui o orçamento sem estourar nenhum.
+Papéis no grafo — `supervisor`, `clima`, `uso_terra`, `metodologia`,
+`synthesis` — recebem um modelo cada, alternando a lista de `settings.models`
+em ordem. Cada nome de modelo distinto tem um `InMemoryRateLimiter`
+compartilhado entre os papéis que o usam: o provedor conta requisições por
+minuto por modelo, então alternar dois modelos equivalentes distribui o
+orçamento sem estourar nenhum.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from langchain_core.language_models import BaseChatModel
 from .agent import build_model, build_rate_limiter
 from .config import Settings
 
-ROLES: tuple[str, ...] = ("supervisor", "clima", "uso_terra", "synthesis")
+ROLES: tuple[str, ...] = ("supervisor", "clima", "uso_terra", "metodologia", "synthesis")
 
 
 class ModelPool:
