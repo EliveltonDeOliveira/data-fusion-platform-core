@@ -58,6 +58,10 @@ func newFakeAgentWithStatus(t *testing.T, status int) *fakeAgent {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"available":true,"region_query":"` + r.URL.Query().Get("region") + `"}`))
 	})
+	mux.HandleFunc("/land_use/raster_overlay", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"available":true,"year":"` + r.URL.Query().Get("year") + `"}`))
+	})
 	srv := httptest.NewServer(mux)
 	return &fakeAgent{Server: srv, askCalls: &calls}
 }
@@ -427,6 +431,23 @@ func TestLandUseTimeseriesEhEncaminhadoProAgenteComQueryString(t *testing.T) {
 		t.Fatalf("status = %d, corpo = %s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), `"region_query":"RS"`) {
+		t.Fatalf("query string não repassada como esperado: %s", rec.Body.String())
+	}
+}
+
+func TestLandUseRasterOverlayEhEncaminhadoProAgenteComQueryString(t *testing.T) {
+	agent := newFakeAgent(t)
+	defer agent.Close()
+
+	mux := newMux(mustParseURL(t, agent.URL), NewRateLimiter(nil, 0, time.Minute), noCache(), noBreaker())
+	req := httptest.NewRequest(http.MethodGet, "/api/land_use/raster_overlay?year=2025", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, corpo = %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"year":"2025"`) {
 		t.Fatalf("query string não repassada como esperado: %s", rec.Body.String())
 	}
 }

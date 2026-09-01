@@ -175,6 +175,30 @@ async def get_land_use_timeseries(region: str, level: int = 2) -> dict:
     return result.model_dump(mode="json")
 
 
+_LAND_USE_RASTER_OVERLAY_DESC = """\
+Visão geral do Rio Grande do Sul inteiro, colorida com a paleta oficial do
+MapBiomas Coleção 11 (uma cor por classe de uso/cobertura), pra sobrepor num
+mapa. Não é leitura de pixel exata de um ponto (use get_land_use_at_point pra
+isso) — é uma imagem em resolução reduzida (parâmetro max_dim) pensada pra
+visualização, não pra análise numérica. Determinístico, sem LLM. Ferramenta de
+apoio de UI — normalmente não é chamada pelo raciocínio do agente.
+
+Parâmetros:
+- year: só 2025 tem raster recortado (mesma restrição de get_land_use_at_point)
+  -> available=false apontando get_land_use_summary pra outro ano.
+- max_dim: tamanho máximo (em pixels) do lado maior da imagem, padrão 1200.
+
+Retorno: available, year, bounds ([oeste, sul, leste, norte], graus WGS84),
+width, height, image_base64 (PNG RGBA, sem prefixo "data:"), source, notes."""
+
+
+@mcp.tool(name="get_land_use_raster_overlay", description=_LAND_USE_RASTER_OVERLAY_DESC)
+async def get_land_use_raster_overlay(year: int = 2025, max_dim: int = 1200) -> dict:
+    """Adapta `land_use.get_land_use_raster_overlay` para a camada MCP."""
+    result = await land_use.get_land_use_raster_overlay(year, max_dim)
+    return result.model_dump(mode="json")
+
+
 _METHODOLOGY_SEARCH_DESC = """\
 Busca por trecho relevante nos ATBDs (documentos de metodologia) da MapBiomas
 Coleção 11 — como a classificação é feita, critérios de cada classe de uso da

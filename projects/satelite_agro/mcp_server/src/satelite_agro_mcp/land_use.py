@@ -167,6 +167,22 @@ class LandUseChange(BaseModel):
     notes: list[str] = []
 
 
+class LandUseRasterOverlay(BaseModel):
+    available: bool
+    year: int | None = None
+    # [oeste, sul, leste, norte] em graus (WGS84) — o raster já está em
+    # EPSG:4326 (sem reprojeção, ver ingestão), então os bounds do rasterio
+    # já servem direto pro `bounds` do BitmapLayer do pydeck.
+    bounds: list[float] | None = None
+    width: int | None = None
+    height: int | None = None
+    # PNG codificado em base64, sem prefixo `data:` — quem consome monta a
+    # data URI (a UI já faz isso pro pydeck.BitmapLayer).
+    image_base64: str | None = None
+    source: str = SOURCE
+    notes: list[str] = []
+
+
 # --------------------------------------------------------------------------- #
 # helpers
 
@@ -755,4 +771,121 @@ async def get_land_use_timeseries(
         year_to=MAX_YEAR,
         classes=classes,
         notes=notes,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# get_land_use_raster_overlay
+
+
+def _read_overlay_array(
+    path: Path, max_dim: int
+) -> tuple[object, tuple[float, float, float, float]]:
+    """Leitura decimada do raster (nearest-neighbor, `out_shape` do rasterio —
+    correto pra dado categórico: média/bilinear inventaria classe que não
+    existe). `max_dim` limita o lado maior — o raster nativo (29282x24714) é
+    grande demais pra servir inteiro numa visão geral web; overview reduzida
+    ainda mostra o padrão espacial, e a leitura de pixel exata continua sendo
+    `get_land_use_at_point`, não este overlay."""
+    import rasterio
+
+    with rasterio.open(path) as src:
+        scale = max(1.0, max(src.width, src.height) / max_dim)
+        out_w = max(1, round(src.width / scale))
+        out_h = max(1, round(src.height / scale))
+        arr = src.read(1, out_shape=(out_h, out_w))
+        b = src.bounds
+    return arr, (b.left, b.bottom, b.right, b.top)
+
+
+def _encode_overlay_png(arr: object, colors: dict[int, str]) -> str:
+    """Aplica a paleta oficial (class_id -> hex_color da `mapbiomas_legend`)
+    via LUT numpy e codifica PNG RGBA em base64. `class_id=0` ("Não
+    Observado") fica transparente (alpha=0) — não pinta oceano/sem-dado de
+    branco opaco por cima do basemap."""
+    import base64
+    from io import BytesIO
+
+    import numpy as np
+    from PIL import Image
+
+    lut = np.zeros((256, 4), dtype=np.uint8)
+    for class_id, hex_color in colors.items():
+        if not (0 <= class_id <= 255):
+            continue
+        h = hex_color.lstrip("#")
+        r, g, b = (int(h[i : i + 2], 16) for i in (0, 2, 4))
+        lut[class_id] = (r, g, b, 0 if class_id == 0 else 200)
+
+    rgba = lut[arr]
+    buffer = BytesIO()
+    Image.fromarray(rgba, mode="RGBA").save(buffer, format="PNG", optimize=True)
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+async def get_land_use_raster_overlay(
+    year: int = RASTER_YEAR,
+    max_dim: int = 1200,
+    *,
+    conn: psycopg.AsyncConnection | None = None,
+    raster_path: Path | None = None,
+) -> LandUseRasterOverlay:
+    """Visão geral do RS inteiro colorida com a paleta oficial do MapBiomas —
+    pra visualização no mapa, não pra leitura de pixel exata (isso continua
+    sendo `get_land_use_at_point`). Só o ano com raster montado (2025, mesma
+    restrição de `get_land_use_at_point`)."""
+    if year != RASTER_YEAR:
+        return LandUseRasterOverlay(
+            available=False,
+            year=year,
+            notes=[
+                f"o overlay de raster usa o recorte do MapBiomas de {RASTER_YEAR} "
+                f"(único ano recortado para o RS). Para outro ano, use get_land_use_summary."
+            ],
+        )
+
+    path = raster_path or _raster_path()
+    if not path.exists():
+        return LandUseRasterOverlay(
+            available=False,
+            year=year,
+            notes=["o raster de uso da terra do RS não está montado neste serviço."],
+        )
+
+    try:
+        async with _acquire(conn) as active, active.cursor() as cur:
+            await cur.execute("SELECT class_id, hex_color FROM satelite_agro.mapbiomas_legend")
+            rows = await cur.fetchall()
+    except _DB_UNAVAILABLE as exc:
+        return LandUseRasterOverlay(
+            available=False,
+            year=year,
+            notes=[f"legenda de cores indisponível no momento ({type(exc).__name__})."],
+        )
+    colors = {int(r["class_id"]): r["hex_color"] for r in rows}
+
+    try:
+        arr, bounds = await asyncio.to_thread(_read_overlay_array, path, max_dim)
+    except OSError as exc:
+        return LandUseRasterOverlay(
+            available=False,
+            year=year,
+            notes=[f"não foi possível ler o raster ({type(exc).__name__})."],
+        )
+
+    png_b64 = await asyncio.to_thread(_encode_overlay_png, arr, colors)
+    height, width = arr.shape
+
+    return LandUseRasterOverlay(
+        available=True,
+        year=year,
+        bounds=list(bounds),
+        width=width,
+        height=height,
+        image_base64=png_b64,
+        notes=[
+            f"visão geral do RS com a paleta oficial do {SOURCE} ({year}), resolução "
+            f"reduzida pra visualização web ({width}x{height} px) — não é leitura de "
+            f"pixel exata (use get_land_use_at_point pra isso)."
+        ],
     )

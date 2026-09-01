@@ -36,6 +36,9 @@ func newMux(agentURL *url.URL, limiter *RateLimiter, cache *ResponseCache, break
 	mux.Handle("GET /api/land_use/at_point", newUpstreamProxy(agentURL, "/land_use/at_point"))
 	mux.Handle("GET /api/land_use/change", newUpstreamProxy(agentURL, "/land_use/change"))
 	mux.Handle("GET /api/land_use/timeseries", newUpstreamProxy(agentURL, "/land_use/timeseries"))
+	mux.Handle(
+		"GET /api/land_use/raster_overlay", newUpstreamProxy(agentURL, "/land_use/raster_overlay"),
+	)
 	// Idem, pra resolver região -> lat/lon (apoio de mapa na UI, mesmo geocoding do clima).
 	mux.Handle("GET /api/region/point", newUpstreamProxy(agentURL, "/region/point"))
 	// Idem, mesma tool do especialista de clima -- prévia padrão da UI sem gastar cota do LLM.

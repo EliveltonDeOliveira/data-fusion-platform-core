@@ -295,6 +295,15 @@ def test_land_use_timeseries_repassa_o_payload_da_tool():
     assert tool.calls == [{"region": "RS", "level": 2}]
 
 
+def test_land_use_raster_overlay_repassa_o_payload_da_tool():
+    tool = _FakeTool({"available": True, "width": 4, "height": 4, "image_base64": "abc="})
+    client = _install(StubAgent(_state_ok(), tools_by_name={"get_land_use_raster_overlay": tool}))
+    r = client.get("/land_use/raster_overlay")
+    assert r.status_code == 200
+    assert r.json()["image_base64"] == "abc="
+    assert tool.calls == [{"year": 2025, "max_dim": 1200}]
+
+
 def test_land_use_sem_agente_pronto_503():
     client = TestClient(server.app)  # sem lifespan -> _state vazio
     r = client.get("/land_use/summary", params={"region": "RS"})

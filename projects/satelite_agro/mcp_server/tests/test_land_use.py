@@ -17,6 +17,7 @@ from satelite_agro_mcp.land_use import (
     _strip_region_wording,
     get_land_use_at_point,
     get_land_use_change,
+    get_land_use_raster_overlay,
     get_land_use_summary,
     get_land_use_timeseries,
 )
@@ -419,3 +420,73 @@ async def test_timeseries_nivel_no_sql():
     agg_sql = conn.executed[1][0]
     assert "level_3_pt" in agg_sql
     assert "ORDER BY 3" in agg_sql
+
+
+# --------------------------------------------------------------------------- #
+# get_land_use_raster_overlay
+
+LEGEND_COLORS_ROWS = [
+    {"class_id": 0, "hex_color": "#ffffff"},  # Não Observado -- vira transparente
+    {"class_id": 15, "hex_color": "#ffd966"},  # Pastagem -- é a classe do pixel [1,2] do fixture
+]
+
+
+async def test_overlay_ano_invalido_nao_toca_no_banco_nem_no_raster(raster):
+    conn = FakeConn([])
+    out = await get_land_use_raster_overlay(2020, conn=conn, raster_path=raster)
+
+    assert not out.available
+    assert conn.executed == []
+    assert any("2025" in n for n in out.notes)
+
+
+async def test_overlay_raster_ausente(tmp_path):
+    conn = FakeConn([])
+    out = await get_land_use_raster_overlay(conn=conn, raster_path=tmp_path / "nao-existe.tif")
+
+    assert not out.available
+    assert conn.executed == []
+    assert any("não está montado" in n for n in out.notes)
+
+
+async def test_overlay_legenda_banco_indisponivel(raster):
+    conn = FakeConn(raises=psycopg.OperationalError("connection refused"))
+    out = await get_land_use_raster_overlay(conn=conn, raster_path=raster)
+
+    assert not out.available
+    assert any("indisponível" in n for n in out.notes)
+
+
+async def test_overlay_gera_imagem_com_bounds_e_dimensoes_corretas(raster):
+    import base64
+    from io import BytesIO
+
+    from PIL import Image
+
+    conn = FakeConn(LEGEND_COLORS_ROWS)
+    out = await get_land_use_raster_overlay(max_dim=4, conn=conn, raster_path=raster)
+
+    assert out.available
+    assert out.width == 4
+    assert out.height == 4
+    # fixture: left=-54, top=-29, pixel 0.25°, 4x4 -> right=-53, bottom=-30
+    assert out.bounds == pytest.approx([-54.0, -30.0, -53.0, -29.0])
+
+    png = Image.open(BytesIO(base64.b64decode(out.image_base64)))
+    assert png.size == (4, 4)
+    assert png.mode == "RGBA"
+    # pixel [1,2] (linha 1, coluna 2) = Pastagem, cor oficial + alpha 200
+    assert png.getpixel((2, 1)) == (0xFF, 0xD9, 0x66, 200)
+    # pixel [0,0] = "Não Observado" (class_id=0) -- transparente, não branco opaco
+    assert png.getpixel((0, 0))[3] == 0
+
+
+async def test_overlay_max_dim_reduz_resolucao_preservando_proporcao(raster):
+    conn = FakeConn(LEGEND_COLORS_ROWS)
+    out = await get_land_use_raster_overlay(max_dim=2, conn=conn, raster_path=raster)
+
+    assert out.available
+    assert out.width == 2
+    assert out.height == 2
+    # bounds geográficos não mudam com a decimação -- só a resolução da imagem
+    assert out.bounds == pytest.approx([-54.0, -30.0, -53.0, -29.0])

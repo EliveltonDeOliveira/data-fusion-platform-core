@@ -119,6 +119,25 @@ async def test_land_use_timeseries_sem_banco_nao_quebra(monkeypatch):
     assert data["notes"]
 
 
+async def test_land_use_raster_overlay_tool_registrada_com_schema():
+    tools = {t.name: t for t in await mcp.list_tools()}
+    tool = tools["get_land_use_raster_overlay"]
+    assert set(tool.input_schema["properties"]) == {"year", "max_dim"}
+    assert tool.input_schema["properties"]["year"]["default"] == 2025
+    assert tool.input_schema["properties"]["max_dim"]["default"] == 1200
+
+
+async def test_land_use_raster_overlay_sem_raster_nao_quebra(monkeypatch):
+    monkeypatch.delenv("RS_COVERAGE_RASTER", raising=False)
+    result = await mcp.call_tool("get_land_use_raster_overlay", {})
+
+    assert not result.is_error
+    data = _payload(result)
+    assert data["available"] is False
+    assert data["image_base64"] is None
+    assert data["notes"]
+
+
 async def test_resolve_region_point_tool_registrada_com_schema():
     tools = {t.name: t for t in await mcp.list_tools()}
     tool = tools["resolve_region_point"]

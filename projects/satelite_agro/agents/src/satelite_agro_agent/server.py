@@ -145,6 +145,13 @@ async def land_use_timeseries(region: str, level: int = 2) -> dict[str, Any]:
     return await _call_tool_direct("get_land_use_timeseries", region=region, level=level)
 
 
+@app.get("/land_use/raster_overlay")
+async def land_use_raster_overlay(year: int = 2025, max_dim: int = 1200) -> dict[str, Any]:
+    """Overview colorida com a paleta oficial pra sobrepor no mapa, sem LLM —
+    imagem (PNG base64), não análise. Ferramenta de apoio de UI."""
+    return await _call_tool_direct("get_land_use_raster_overlay", year=year, max_dim=max_dim)
+
+
 @app.get("/region/point")
 async def region_point(query: str) -> dict[str, Any]:
     """Resolve uma região do RS pra um ponto (lat/lon), sem LLM — só apoio de
