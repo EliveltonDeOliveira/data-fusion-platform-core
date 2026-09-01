@@ -41,25 +41,32 @@ def tool_names(messages: list[Any]) -> list[str]:
     return names
 
 
+def parse_tool_content(content: Any) -> dict[str, Any] | None:
+    """Conteúdo cru de uma tool call (str JSON ou blocos de conteúdo MCP) -> dict.
+
+    `None` se não for JSON de objeto — quem chama decide o que fazer (ignorar
+    numa lista, ou levantar erro numa chamada direta e isolada).
+    """
+    if isinstance(content, list):  # blocos de conteúdo MCP
+        content = "".join(
+            b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"
+        )
+    if not isinstance(content, str):
+        return None
+    try:
+        parsed = json.loads(content)
+    except (ValueError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def tool_payloads(messages: list[Any]) -> list[dict[str, Any]]:
     """Conteúdo das ToolMessages, já como dict. Ignora o que não for JSON de objeto."""
     out: list[dict[str, Any]] = []
     for msg in messages:
         if not isinstance(msg, ToolMessage):
             continue
-        content = msg.content
-        if isinstance(content, list):  # blocos de conteúdo MCP
-            content = "".join(
-                b.get("text", "")
-                for b in content
-                if isinstance(b, dict) and b.get("type") == "text"
-            )
-        if not isinstance(content, str):
-            continue
-        try:
-            parsed = json.loads(content)
-        except (ValueError, TypeError):
-            continue
-        if isinstance(parsed, dict):
+        parsed = parse_tool_content(msg.content)
+        if parsed is not None:
             out.append(parsed)
     return out

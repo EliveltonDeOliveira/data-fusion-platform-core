@@ -128,10 +128,12 @@ async def build_graph(
     """
     pool = pool or ModelPool(settings)
 
-    if clima_agent is None or uso_terra_agent is None or metodologia_agent is None:
-        if tools is None:
-            tools = await load_tools(settings)
-        by_name = {t.name: t for t in tools}
+    need_tools = clima_agent is None or uso_terra_agent is None or metodologia_agent is None
+    if need_tools and tools is None:
+        tools = await load_tools(settings)
+    by_name = {t.name: t for t in tools} if tools else {}
+
+    if need_tools:
         clima_agent = clima_agent or build_clima_specialist(pool.for_role("clima"), by_name)
         uso_terra_agent = uso_terra_agent or build_uso_terra_specialist(
             pool.for_role("uso_terra"), by_name
@@ -177,4 +179,5 @@ async def build_graph(
     graph = builder.compile()
     graph.role_models = pool.role_models  # type: ignore[attr-defined]
     graph.model_pool = pool  # type: ignore[attr-defined]
+    graph.tools_by_name = by_name  # type: ignore[attr-defined]
     return graph

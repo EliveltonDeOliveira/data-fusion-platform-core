@@ -16,12 +16,15 @@ class StubAgent:
         *,
         raises: Exception | None = None,
         model_pool: Any = None,
+        tools_by_name: dict[str, Any] | None = None,
     ):
         self._result = result or {}
         self._raises = raises
         self.role_models = {"supervisor": "m-a", "clima": "m-b", "uso_terra": "m-a"}
         if model_pool is not None:
             self.model_pool = model_pool
+        if tools_by_name is not None:
+            self.tools_by_name = tools_by_name
 
     async def ainvoke(self, _inputs: dict) -> dict:
         if self._raises is not None:

@@ -25,6 +25,14 @@ func newMux(agentURL *url.URL, limiter *RateLimiter, cache *ResponseCache, break
 	mux.HandleFunc("/healthz", healthzHandler)
 	mux.Handle("POST /api/ask", newAskHandler(agentURL, limiter, cache, breaker))
 	mux.Handle("GET /api/status", newUpstreamProxy(agentURL, "/status"))
+	// Consulta determinística (sem LLM) de uso da terra — filtro região/ano/
+	// nível na UI não deveria gastar cota do Gemini nem esperar alguns
+	// segundos por uma leitura direta do Postgres. Passthrough puro: sem
+	// rate limit/cache/circuit breaker, que são especificamente pra proteger
+	// a cota compartilhada do LLM.
+	mux.Handle("GET /api/land_use/summary", newUpstreamProxy(agentURL, "/land_use/summary"))
+	mux.Handle("GET /api/land_use/at_point", newUpstreamProxy(agentURL, "/land_use/at_point"))
+	mux.Handle("GET /api/land_use/change", newUpstreamProxy(agentURL, "/land_use/change"))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "não implementado", http.StatusNotImplemented)
 	})

@@ -41,6 +41,10 @@ func newFakeAgentWithStatus(t *testing.T, status int) *fakeAgent {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ready":true,"in_flight":0,"models":{}}`))
 	})
+	mux.HandleFunc("/land_use/summary", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"available":true,"region_query":"` + r.URL.Query().Get("region") + `"}`))
+	})
 	srv := httptest.NewServer(mux)
 	return &fakeAgent{Server: srv, askCalls: &calls}
 }
@@ -267,6 +271,47 @@ func TestAskNaoCacheiaResposta5xx(t *testing.T) {
 	}
 	if calls := agent.AskCalls(); calls != 2 {
 		t.Fatalf("erro nunca deveria ser cacheado — esperava 2 chamadas ao agente, teve %d", calls)
+	}
+}
+
+func TestLandUseSummaryEhEncaminhadoProAgenteComQueryString(t *testing.T) {
+	agent := newFakeAgent(t)
+	defer agent.Close()
+
+	mux := newMux(mustParseURL(t, agent.URL), NewRateLimiter(nil, 0, time.Minute), noCache(), noBreaker())
+	req := httptest.NewRequest(http.MethodGet, "/api/land_use/summary?region=Porto+Alegre&year=2025", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, corpo = %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"region_query":"Porto Alegre"`) {
+		t.Fatalf("query string não repassada como esperado: %s", rec.Body.String())
+	}
+}
+
+func TestLandUseNaoEhLimitadoNemPassaPeloCircuitBreaker(t *testing.T) {
+	agent := newFakeAgent(t)
+	defer agent.Close()
+
+	limiter, _ := newTestLimiter(t, 1, time.Minute)
+	mux := newMux(mustParseURL(t, agent.URL), limiter, noCache(), noBreaker())
+
+	// consome o único slot do rate limit em /api/ask...
+	ask := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(`{"question":"a"}`))
+	ask.Header.Set("X-Forwarded-For", "10.0.0.1")
+	mux.ServeHTTP(httptest.NewRecorder(), ask)
+
+	// ...mas /api/land_use/* não é afetado (consulta determinística, não gasta cota do LLM).
+	for i := 0; i < 3; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/api/land_use/summary?region=RS", nil)
+		req.Header.Set("X-Forwarded-For", "10.0.0.1")
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("chamada %d a /api/land_use/summary deveria passar, status = %d", i+1, rec.Code)
+		}
 	}
 }
 

@@ -172,6 +172,41 @@ async def test_role_models_exposto_no_grafo():
     }
 
 
+async def test_tools_by_name_vazio_quando_agentes_sao_injetados():
+    """Nos testes acima, os 3 especialistas são injetados — o grafo nunca
+    carrega tools do MCP, então `tools_by_name` fica vazio (não None)."""
+    graph, *_ = await _graph(Plan(clima=True))
+    assert graph.tools_by_name == {}
+
+
+async def test_tools_by_name_exposto_quando_tools_sao_passadas():
+    """Usado pelos endpoints REST diretos (`/land_use/*`, ver direct_tools.py)
+    pra chamar uma tool sem passar pelo LLM."""
+
+    class _FakeTool:
+        def __init__(self, name: str):
+            self.name = name
+
+    fake_tools = [_FakeTool("get_land_use_summary"), _FakeTool("get_weather_trend")]
+
+    async def synthesizer(question, sub_answers):
+        return "sintese"
+
+    async def planner(_q):
+        return Plan(clima=True)
+
+    graph = await build_graph(
+        _SETTINGS,
+        planner=planner,
+        clima_agent=_clima(),
+        uso_terra_agent=_uso(),
+        metodologia_agent=_metodologia(),
+        synthesizer=synthesizer,
+        tools=fake_tools,
+    )
+    assert set(graph.tools_by_name) == {"get_land_use_summary", "get_weather_trend"}
+
+
 @pytest.mark.parametrize(
     "plan_obj,expected",
     [

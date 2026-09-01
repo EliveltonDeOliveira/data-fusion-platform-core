@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from .agent import build_agent
 from .config import Settings
+from .direct_tools import ToolNotAvailableError, call_tool
 from .observability import route_run
 
 _state: dict[str, Any] = {}
@@ -84,6 +85,45 @@ async def status() -> StatusResponse:
         models={
             name: ModelStatusOut(max_rpm=s.max_rpm, waiting=s.waiting) for name, s in stats.items()
         },
+    )
+
+
+async def _call_land_use_tool(name: str, **kwargs: Any) -> dict[str, Any]:
+    """Chama uma tool de uso da terra direto, sem LLM — ver `direct_tools.py`."""
+    agent = _state.get("agent")
+    tools_by_name = getattr(agent, "tools_by_name", None)
+    if agent is None or not tools_by_name:
+        raise HTTPException(status_code=503, detail="agente ainda inicializando")
+    try:
+        return await call_tool(tools_by_name, name, **kwargs)
+    except ToolNotAvailableError as exc:
+        raise HTTPException(status_code=503, detail=f"tool indisponível: {exc}") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"falha ao consultar: {exc}") from exc
+
+
+@app.get("/land_use/summary")
+async def land_use_summary(region: str, year: int = 2025, level: int = 2) -> dict[str, Any]:
+    return await _call_land_use_tool("get_land_use_summary", region=region, year=year, level=level)
+
+
+@app.get("/land_use/at_point")
+async def land_use_at_point(
+    lat: float, lon: float, year: int = 2025, level: int = 2
+) -> dict[str, Any]:
+    return await _call_land_use_tool(
+        "get_land_use_at_point", lat=lat, lon=lon, year=year, level=level
+    )
+
+
+@app.get("/land_use/change")
+async def land_use_change(
+    region: str, year_from: int, year_to: int, level: int = 2
+) -> dict[str, Any]:
+    return await _call_land_use_tool(
+        "get_land_use_change", region=region, year_from=year_from, year_to=year_to, level=level
     )
 
 

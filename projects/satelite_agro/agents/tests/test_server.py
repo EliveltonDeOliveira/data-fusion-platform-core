@@ -198,6 +198,80 @@ async def test_in_flight_zera_mesmo_quando_o_agente_falha():
     assert client.get("/status").json()["in_flight"] == 0
 
 
+class _FakeTool:
+    """Espelha só o que `direct_tools.call_tool` usa de uma `BaseTool` do MCP:
+    `ainvoke` devolvendo o payload como string JSON (mesmo formato que a tool
+    real devolve através do `langchain_mcp_adapters`)."""
+
+    def __init__(self, result: dict | None = None, *, raises: Exception | None = None):
+        self._result = result
+        self._raises = raises
+        self.calls: list[dict] = []
+
+    async def ainvoke(self, kwargs: dict) -> str:
+        import json
+
+        self.calls.append(kwargs)
+        if self._raises is not None:
+            raise self._raises
+        return json.dumps(self._result)
+
+
+def test_land_use_summary_repassa_o_payload_da_tool():
+    tool = _FakeTool({"available": True, "region_query": "Porto Alegre", "classes": []})
+    client = _install(StubAgent(_state_ok(), tools_by_name={"get_land_use_summary": tool}))
+    r = client.get("/land_use/summary", params={"region": "Porto Alegre", "year": 2025, "level": 2})
+    assert r.status_code == 200
+    assert r.json() == {"available": True, "region_query": "Porto Alegre", "classes": []}
+    assert tool.calls == [{"region": "Porto Alegre", "year": 2025, "level": 2}]
+
+
+def test_land_use_at_point_repassa_o_payload_da_tool():
+    tool = _FakeTool({"available": True, "label": "Soja"})
+    client = _install(StubAgent(_state_ok(), tools_by_name={"get_land_use_at_point": tool}))
+    r = client.get("/land_use/at_point", params={"lat": -30.03, "lon": -51.23})
+    assert r.status_code == 200
+    assert r.json()["label"] == "Soja"
+    assert tool.calls == [{"lat": -30.03, "lon": -51.23, "year": 2025, "level": 2}]
+
+
+def test_land_use_change_repassa_o_payload_da_tool():
+    tool = _FakeTool({"available": True, "classes": []})
+    client = _install(StubAgent(_state_ok(), tools_by_name={"get_land_use_change": tool}))
+    r = client.get("/land_use/change", params={"region": "RS", "year_from": 2015, "year_to": 2025})
+    assert r.status_code == 200
+    assert tool.calls == [{"region": "RS", "year_from": 2015, "year_to": 2025, "level": 2}]
+
+
+def test_land_use_sem_agente_pronto_503():
+    client = TestClient(server.app)  # sem lifespan -> _state vazio
+    r = client.get("/land_use/summary", params={"region": "RS"})
+    assert r.status_code == 503
+
+
+def test_land_use_tool_nao_carregada_503():
+    client = _install(StubAgent(_state_ok(), tools_by_name={}))
+    r = client.get("/land_use/summary", params={"region": "RS"})
+    assert r.status_code == 503
+
+
+def test_land_use_falha_da_tool_vira_502():
+    tool = _FakeTool(raises=RuntimeError("postgres fora do ar"))
+    client = _install(StubAgent(_state_ok(), tools_by_name={"get_land_use_summary": tool}))
+    r = client.get("/land_use/summary", params={"region": "RS"})
+    assert r.status_code == 502
+    assert "postgres fora do ar" in r.json()["detail"]
+
+
+def test_land_use_nunca_bate_no_ask_nem_no_in_flight():
+    """Chamada direta (sem LLM) não deve mexer no contador usado pelo
+    rodapé de rate limit da UI — não gasta cota do Gemini."""
+    tool = _FakeTool({"available": True, "classes": []})
+    client = _install(StubAgent(_state_ok(), tools_by_name={"get_land_use_summary": tool}))
+    client.get("/land_use/summary", params={"region": "RS"})
+    assert server._state.get("in_flight", 0) == 0
+
+
 def test_healthz():
     client = _install(StubAgent(_state_ok()))
     assert client.get("/healthz").json() == {"status": "ok"}
