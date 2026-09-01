@@ -120,6 +120,30 @@ class LandUsePoint(BaseModel):
     notes: list[str] = []
 
 
+class LandUseYearPoint(BaseModel):
+    year: int
+    area_ha: float
+    area_pct: float
+
+
+class LandUseTimeseriesClass(BaseModel):
+    code: str | None
+    label: str
+    points: list[LandUseYearPoint] = []
+
+
+class LandUseTimeseries(BaseModel):
+    region_query: str
+    available: bool
+    location: LandUseLocation | None = None
+    level: int = 2
+    year_from: int = MIN_YEAR
+    year_to: int = MAX_YEAR
+    classes: list[LandUseTimeseriesClass] = []
+    source: str = SOURCE
+    notes: list[str] = []
+
+
 class LandUseChangeClass(BaseModel):
     code: str | None
     label: str
@@ -628,6 +652,107 @@ async def get_land_use_change(
         level=lvl,
         total_area_from_ha=round(total_from, 1),
         total_area_to_ha=round(total_to, 1),
+        classes=classes,
+        notes=notes,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# get_land_use_timeseries
+
+
+async def get_land_use_timeseries(
+    region: str,
+    level: int = 2,
+    *,
+    conn: psycopg.AsyncConnection | None = None,
+) -> LandUseTimeseries:
+    """Série completa 1985-2025, por classe — toda a profundidade histórica
+    que o dado tabular tem, numa só consulta (mesma tabela pré-agregada do
+    summary/change). Serve pra mostrar tendência de longo prazo, não só
+    comparar dois anos."""
+    lvl = _validate_level(level)
+    if lvl is None:
+        return LandUseTimeseries(
+            region_query=region,
+            available=False,
+            level=level,
+            notes=[f"nível inválido: {level}. Use 1, 2, 3 ou 4 (padrão 2)."],
+        )
+
+    try:
+        async with _acquire(conn) as active:
+            loc, notes = await _resolve_region(active, region)
+            if loc is None:
+                return LandUseTimeseries(
+                    region_query=region, available=False, level=lvl, notes=notes
+                )
+
+            where = "1 = 1"
+            params: dict[str, object] = {}
+            if loc.kind == "municipality":
+                where = "lu.geocode = %(geocode)s"
+                params["geocode"] = loc.geocode
+
+            sql = (
+                f"SELECT {_label_sql(lvl)} AS label, {_code_sql(lvl)} AS code, "  # noqa: S608 - nível é int validado
+                f"lu.year AS year, sum(lu.area_ha) AS area_ha "
+                f"FROM satelite_agro.land_use_municipality lu "
+                f"JOIN satelite_agro.mapbiomas_legend g ON g.class_id = lu.class_id "
+                f"WHERE {where} "
+                f"GROUP BY 1, 2, 3 ORDER BY 3"
+            )
+            async with active.cursor() as cur:
+                await cur.execute(sql, params)
+                rows = await cur.fetchall()
+    except _DB_UNAVAILABLE as exc:
+        return LandUseTimeseries(
+            region_query=region,
+            available=False,
+            level=lvl,
+            notes=[f"consulta de uso da terra indisponível no momento ({type(exc).__name__})."],
+        )
+
+    if not rows:
+        notes.append(f"sem série histórica de uso da terra para {loc.name} — verifique a ingestão.")
+        return LandUseTimeseries(
+            region_query=region, available=False, location=loc, level=lvl, notes=notes
+        )
+
+    total_by_year: dict[int, float] = {}
+    for r in rows:
+        total_by_year[int(r["year"])] = total_by_year.get(int(r["year"]), 0.0) + float(r["area_ha"])
+
+    by_class: dict[tuple[str | None, str], list[LandUseYearPoint]] = {}
+    for r in rows:
+        year = int(r["year"])
+        area = float(r["area_ha"])
+        total = total_by_year.get(year, 0.0)
+        key = (r["code"], r["label"])
+        by_class.setdefault(key, []).append(
+            LandUseYearPoint(
+                year=year,
+                area_ha=round(area, 1),
+                area_pct=round(area / total * 100, 2) if total else 0.0,
+            )
+        )
+
+    classes = [
+        LandUseTimeseriesClass(code=code, label=label, points=points)
+        for (code, label), points in by_class.items()
+    ]
+    notes.append(
+        f"série de área (hectares) por classe de nível {lvl} do {SOURCE}, "
+        f"{'estado' if loc.kind == 'state' else 'município'} do RS, {MIN_YEAR}-{MAX_YEAR}. "
+        f"Histórico/tendência — não é leitura do dia."
+    )
+    return LandUseTimeseries(
+        region_query=region,
+        available=True,
+        location=loc,
+        level=lvl,
+        year_from=MIN_YEAR,
+        year_to=MAX_YEAR,
         classes=classes,
         notes=notes,
     )

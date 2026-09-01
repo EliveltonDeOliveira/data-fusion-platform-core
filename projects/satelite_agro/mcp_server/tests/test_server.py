@@ -77,6 +77,10 @@ async def test_land_use_tools_registradas_com_schema():
     }
     assert change.input_schema["properties"]["level"]["default"] == 2
 
+    timeseries = tools["get_land_use_timeseries"]
+    assert set(timeseries.input_schema["properties"]) == {"region", "level"}
+    assert timeseries.input_schema["properties"]["level"]["default"] == 2
+
 
 async def test_land_use_sem_banco_nao_quebra(monkeypatch):
     # sem DATABASE_URL no ambiente -> a tool responde available=false com a
@@ -97,6 +101,16 @@ async def test_land_use_change_sem_banco_nao_quebra(monkeypatch):
         "get_land_use_change",
         {"region": "Santa Maria", "year_from": 1990, "year_to": 2020},
     )
+
+    assert not result.is_error
+    data = _payload(result)
+    assert data["available"] is False
+    assert data["classes"] == []
+
+
+async def test_land_use_timeseries_sem_banco_nao_quebra(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    result = await mcp.call_tool("get_land_use_timeseries", {"region": "Santa Maria"})
 
     assert not result.is_error
     data = _payload(result)

@@ -38,6 +38,12 @@ def get_land_use_change(region: str, year_from: int, year_to: int) -> str:
 
 
 @tool
+def get_land_use_timeseries(region: str) -> str:
+    """série histórica."""
+    return "{}"
+
+
+@tool
 def search_mapbiomas_methodology(query: str) -> str:
     """metodologia."""
     return "{}"
@@ -50,6 +56,7 @@ _TOOLS = {
         get_land_use_summary,
         get_land_use_at_point,
         get_land_use_change,
+        get_land_use_timeseries,
         search_mapbiomas_methodology,
     )
 }
@@ -80,6 +87,7 @@ def test_prompts_herdam_guardrails_e_tem_foco():
     assert "SEU FOCO" in specialists._USO_TERRA_FOCO
     assert "SEU FOCO" in specialists._METODOLOGIA_FOCO
     assert "get_land_use_change" in specialists._USO_TERRA_FOCO
+    assert "get_land_use_timeseries" in specialists._USO_TERRA_FOCO
     assert "source_document" in specialists._METODOLOGIA_FOCO
 
 

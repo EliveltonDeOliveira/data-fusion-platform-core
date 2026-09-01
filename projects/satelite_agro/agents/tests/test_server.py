@@ -287,6 +287,14 @@ def test_land_use_change_repassa_o_payload_da_tool():
     assert tool.calls == [{"region": "RS", "year_from": 2015, "year_to": 2025, "level": 2}]
 
 
+def test_land_use_timeseries_repassa_o_payload_da_tool():
+    tool = _FakeTool({"available": True, "classes": [{"label": "Agricultura", "points": []}]})
+    client = _install(StubAgent(_state_ok(), tools_by_name={"get_land_use_timeseries": tool}))
+    r = client.get("/land_use/timeseries", params={"region": "RS"})
+    assert r.status_code == 200
+    assert tool.calls == [{"region": "RS", "level": 2}]
+
+
 def test_land_use_sem_agente_pronto_503():
     client = TestClient(server.app)  # sem lifespan -> _state vazio
     r = client.get("/land_use/summary", params={"region": "RS"})

@@ -149,6 +149,32 @@ async def get_land_use_change(region: str, year_from: int, year_to: int, level: 
     return result.model_dump(mode="json")
 
 
+_LAND_USE_TIMESERIES_DESC = """\
+Série histórica completa (1985-2025) de uso e cobertura da terra (MapBiomas
+Coleção 11) de uma região do Rio Grande do Sul, por classe, em hectares e
+percentual — toda a profundidade que o dado tabular tem, não só dois anos.
+Determinístico, sem LLM. Informativo: mostra a tendência de longo prazo —
+nunca a causa, nunca projeção do futuro, nunca recomendação.
+
+Parâmetros:
+- region: município do RS ("Santa Maria"), "região de X" (resolve para o
+  município X) ou o estado ("RS", "Rio Grande do Sul"). Fora do RS ou nome
+  não reconhecido -> available=false com a explicação em notes.
+- level: nível da legenda hierárquica, 1 a 4. Padrão 2. Mesmo "carry down"
+  dos outros dois. Sempre explícito, nunca agrega/desagrega em silêncio.
+
+Retorno: available, location, level, year_from (1985), year_to (2025),
+classes (code, label, points: lista de {year, area_ha, area_pct} pra cada
+ano do intervalo) e notes. Sempre repasse as notes."""
+
+
+@mcp.tool(name="get_land_use_timeseries", description=_LAND_USE_TIMESERIES_DESC)
+async def get_land_use_timeseries(region: str, level: int = 2) -> dict:
+    """Adapta `land_use.get_land_use_timeseries` para a camada MCP."""
+    result = await land_use.get_land_use_timeseries(region, level)
+    return result.model_dump(mode="json")
+
+
 _METHODOLOGY_SEARCH_DESC = """\
 Busca por trecho relevante nos ATBDs (documentos de metodologia) da MapBiomas
 Coleção 11 — como a classificação é feita, critérios de cada classe de uso da

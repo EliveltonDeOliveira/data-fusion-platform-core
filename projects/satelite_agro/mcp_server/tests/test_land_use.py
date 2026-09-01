@@ -18,6 +18,7 @@ from satelite_agro_mcp.land_use import (
     get_land_use_at_point,
     get_land_use_change,
     get_land_use_summary,
+    get_land_use_timeseries,
 )
 
 # --------------------------------------------------------------------------- #
@@ -351,3 +352,70 @@ async def test_change_nivel_no_sql():
     agg_sql = conn.executed[1][0]
     assert "level_3_pt" in agg_sql
     assert "lu.year IN" in agg_sql
+
+
+TIMESERIES_ROWS = [
+    {"label": "Agricultura", "code": "3.2", "year": 1985, "area_ha": 30000.0},
+    {"label": "Formação Campestre", "code": "2.1", "year": 1985, "area_ha": 70000.0},
+    {"label": "Agricultura", "code": "3.2", "year": 2025, "area_ha": 64000.0},
+    {"label": "Formação Campestre", "code": "2.1", "year": 2025, "area_ha": 52000.0},
+]
+
+
+async def test_timeseries_serie_completa_por_classe():
+    conn = FakeConn([SANTA_MARIA_ROW], TIMESERIES_ROWS)
+    out = await get_land_use_timeseries("Santa Maria", 2, conn=conn)
+
+    assert out.available
+    assert out.year_from == 1985
+    assert out.year_to == 2025
+    assert out.location is not None and out.location.kind == "municipality"
+    agricultura = next(c for c in out.classes if c.label == "Agricultura")
+    assert [p.year for p in agricultura.points] == [1985, 2025]
+    assert agricultura.points[0].area_ha == pytest.approx(30000.0, abs=0.1)
+    assert agricultura.points[0].area_pct == pytest.approx(30.0, abs=0.1)  # 30000/100000
+    assert agricultura.points[1].area_pct == pytest.approx(55.17, abs=0.1)  # 64000/116000
+
+
+async def test_timeseries_estado_nao_resolve_municipio():
+    conn = FakeConn(TIMESERIES_ROWS)
+    out = await get_land_use_timeseries("Rio Grande do Sul", 2, conn=conn)
+
+    assert out.available
+    assert out.location is not None and out.location.kind == "state"
+    assert "ibge_municipio" not in conn.executed[0][0]
+    assert conn.executed[0][1] == {}
+
+
+async def test_timeseries_nivel_invalido_nao_consulta():
+    conn = FakeConn([SANTA_MARIA_ROW], TIMESERIES_ROWS)
+    out = await get_land_use_timeseries("Santa Maria", 9, conn=conn)
+
+    assert not out.available
+    assert conn.executed == []
+    assert any("nível inválido" in n for n in out.notes)
+
+
+async def test_timeseries_municipio_desconhecido():
+    conn = FakeConn([])
+    out = await get_land_use_timeseries("Londrina", 2, conn=conn)
+
+    assert not out.available
+    assert out.location is None
+    assert any("não é um município reconhecido" in n for n in out.notes)
+
+
+async def test_timeseries_banco_indisponivel():
+    conn = FakeConn(raises=psycopg.OperationalError("connection refused"))
+    out = await get_land_use_timeseries("Santa Maria", 2, conn=conn)
+
+    assert not out.available
+    assert any("indisponível" in n for n in out.notes)
+
+
+async def test_timeseries_nivel_no_sql():
+    conn = FakeConn([SANTA_MARIA_ROW], TIMESERIES_ROWS)
+    await get_land_use_timeseries("Santa Maria", 3, conn=conn)
+    agg_sql = conn.executed[1][0]
+    assert "level_3_pt" in agg_sql
+    assert "ORDER BY 3" in agg_sql

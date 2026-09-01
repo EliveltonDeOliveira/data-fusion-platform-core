@@ -138,6 +138,13 @@ async def land_use_change(
     )
 
 
+@app.get("/land_use/timeseries")
+async def land_use_timeseries(region: str, level: int = 2) -> dict[str, Any]:
+    """Série 1985-2025 sem LLM — usada pelo painel pra mostrar a profundidade
+    histórica do dado (não é uma pergunta do usuário, é contexto)."""
+    return await _call_tool_direct("get_land_use_timeseries", region=region, level=level)
+
+
 @app.get("/region/point")
 async def region_point(query: str) -> dict[str, Any]:
     """Resolve uma região do RS pra um ponto (lat/lon), sem LLM — só apoio de

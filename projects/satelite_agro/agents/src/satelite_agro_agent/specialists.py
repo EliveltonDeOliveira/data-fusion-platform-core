@@ -15,7 +15,12 @@ from langchain_core.tools import BaseTool
 from .agent import SYSTEM_PROMPT
 
 CLIMA_TOOLS = ("get_weather_trend",)
-USO_TERRA_TOOLS = ("get_land_use_summary", "get_land_use_at_point", "get_land_use_change")
+USO_TERRA_TOOLS = (
+    "get_land_use_summary",
+    "get_land_use_at_point",
+    "get_land_use_change",
+    "get_land_use_timeseries",
+)
 METODOLOGIA_TOOLS = ("search_mapbiomas_methodology",)
 
 _RECUSA_FOCO = """\
@@ -33,8 +38,9 @@ pergunta. Não comente uso da terra — outro especialista cuida disso. \
 _USO_TERRA_FOCO = f"""\
 
 SEU FOCO: uso e cobertura da terra (MapBiomas Coleção 11). Responda só a parte \
-de uso da terra. Para variação entre dois anos use get_land_use_change. Não \
-comente clima — outro especialista cuida disso. \
+de uso da terra. Para variação entre dois anos use get_land_use_change; para \
+tendência de longo prazo ou "como mudou desde X" use get_land_use_timeseries \
+(1985-2025 inteiro). Não comente clima — outro especialista cuida disso. \
 {_RECUSA_FOCO}"""
 
 _METODOLOGIA_FOCO = f"""\
