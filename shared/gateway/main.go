@@ -1,5 +1,6 @@
-// Gateway (Go) — esqueleto. Por ora expõe /healthz e um /api/* ainda não
-// implementado.
+// Gateway (Go) — proxy único de entrada pros agentes. Aplica rate limit por
+// IP (Valkey, janela de 1 min) na frente de /api/ask, protegendo a cota
+// compartilhada do LLM de um único cliente monopolizá-la.
 package main
 
 import (
@@ -9,33 +10,32 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "consulta /healthz localmente e sai (0 ok, 1 falha)")
 	flag.Parse()
 
-	port := os.Getenv("GATEWAY_PORT")
-	if port == "" {
-		port = "8080"
-	}
+	port := envOr("GATEWAY_PORT", "8080")
 
 	if *healthcheck {
 		os.Exit(runHealthcheck(port))
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprintln(w, "ok")
-	})
-	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "não implementado", http.StatusNotImplemented)
-	})
+	agentURL, err := url.Parse(envOr("AGENT_URL", "http://agent-satelite-agro:8000"))
+	if err != nil {
+		log.Fatalf("AGENT_URL inválido: %v", err)
+	}
+
+	mux := newMux(agentURL, buildRateLimiter())
 
 	srv := &http.Server{
 		Addr:              ":" + port,
@@ -44,7 +44,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("gateway ouvindo em :%s", port)
+		log.Printf("gateway ouvindo em :%s (agente=%s)", port, agentURL)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("erro no servidor: %v", err)
 		}
@@ -59,6 +59,41 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("shutdown: %v", err)
 	}
+}
+
+// buildRateLimiter fica sem limite (sempre permite) se VALKEY_URL não
+// estiver configurada — dev local sem a infra completa não deve travar.
+func buildRateLimiter() *RateLimiter {
+	valkeyURL := os.Getenv("VALKEY_URL")
+	if valkeyURL == "" {
+		return NewRateLimiter(nil, 0, time.Minute)
+	}
+	opts, err := redis.ParseURL(valkeyURL)
+	if err != nil {
+		log.Printf("VALKEY_URL inválida, rate limit desligado: %v", err)
+		return NewRateLimiter(nil, 0, time.Minute)
+	}
+	limit := envOrInt("GATEWAY_RATE_LIMIT_RPM", 6)
+	return NewRateLimiter(redis.NewClient(opts), int64(limit), time.Minute)
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func envOrInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 func runHealthcheck(port string) int {
