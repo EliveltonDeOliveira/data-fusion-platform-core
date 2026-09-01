@@ -176,4 +176,5 @@ async def build_graph(
 
     graph = builder.compile()
     graph.role_models = pool.role_models  # type: ignore[attr-defined]
+    graph.model_pool = pool  # type: ignore[attr-defined]
     return graph

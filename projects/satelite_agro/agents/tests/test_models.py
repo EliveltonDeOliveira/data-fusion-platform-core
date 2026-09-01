@@ -35,3 +35,19 @@ def test_for_role_usa_o_modelo_do_papel():
 def test_for_role_desconhecido_cai_no_model_padrao():
     pool = ModelPool(_settings(models=("m-a", "m-b"), model="fallback"))
     assert pool.for_role("qualquer").model.endswith("fallback")
+
+
+def test_stats_vazio_antes_de_qualquer_for_role():
+    pool = ModelPool(_settings(models=("m-a", "m-b")))
+    assert pool.stats() == {}
+
+
+def test_stats_tem_uma_entrada_por_modelo_ja_usado():
+    pool = ModelPool(_settings(models=("m-a", "m-b"), max_rpm=7))
+    pool.for_role("supervisor")  # -> m-a
+    pool.for_role("clima")  # -> m-b
+
+    stats = pool.stats()
+    assert set(stats) == {"m-a", "m-b"}
+    assert stats["m-a"].max_rpm == 7
+    assert stats["m-a"].waiting == 0

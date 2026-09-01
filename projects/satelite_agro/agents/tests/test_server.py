@@ -86,6 +86,83 @@ def test_ask_valida_pergunta():
     assert client.post("/ask", json={}).status_code == 422
 
 
+def test_status_sem_agente_pronto():
+    client = TestClient(server.app)  # sem lifespan -> _state vazio
+    r = client.get("/status")
+    assert r.status_code == 200
+    assert r.json() == {"ready": False, "in_flight": 0, "models": {}}
+
+
+def test_status_sem_model_pool_no_agente():
+    client = _install(StubAgent(_state_ok()))  # StubAgent sem model_pool
+    r = client.get("/status")
+    assert r.json() == {"ready": False, "in_flight": 0, "models": {}}
+
+
+def test_status_repassa_stats_do_pool():
+    class _FakePool:
+        def stats(self):
+            from satelite_agro_agent.status import ModelStatus
+
+            return {
+                "gemini-3.5-flash-lite": ModelStatus(max_rpm=10, waiting=0),
+                "gemini-3.1-flash-lite": ModelStatus(max_rpm=10, waiting=2),
+            }
+
+    client = _install(StubAgent(_state_ok(), model_pool=_FakePool()))
+    r = client.get("/status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ready"] is True
+    assert body["in_flight"] == 0
+    assert body["models"]["gemini-3.1-flash-lite"] == {"max_rpm": 10, "waiting": 2}
+    assert body["models"]["gemini-3.5-flash-lite"] == {"max_rpm": 10, "waiting": 0}
+
+
+async def test_in_flight_conta_enquanto_o_agente_processa_e_zera_no_final():
+    """Reproduz o achado do dono: o widget só devia mudar DURANTE o
+    processamento, não só depois que a resposta chega. `in_flight` cobre o
+    início ao fim de `agent.ainvoke`, não só o tempo bloqueado no rate
+    limiter (que é o que `models[*].waiting` mede)."""
+    import asyncio
+
+    import httpx
+
+    ready = asyncio.Event()
+    release = asyncio.Event()
+
+    class _SlowAgent(StubAgent):
+        async def ainvoke(self, inputs):
+            ready.set()
+            await release.wait()
+            return await super().ainvoke(inputs)
+
+    server._state["agent"] = _SlowAgent(_state_ok())
+    server._state["settings"] = _SETTINGS
+
+    transport = httpx.ASGITransport(app=server.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        task = asyncio.create_task(client.post("/ask", json={"question": "oi"}))
+        await asyncio.wait_for(ready.wait(), timeout=1)
+
+        mid = await client.get("/status")
+        assert mid.json()["in_flight"] == 1
+
+        release.set()
+        resp = await task
+        assert resp.status_code == 200
+
+        after = await client.get("/status")
+        assert after.json()["in_flight"] == 0
+
+
+async def test_in_flight_zera_mesmo_quando_o_agente_falha():
+    client = _install(StubAgent(raises=RuntimeError("boom")))
+    r = client.post("/ask", json={"question": "oi"})
+    assert r.status_code == 502
+    assert client.get("/status").json()["in_flight"] == 0
+
+
 def test_healthz():
     client = _install(StubAgent(_state_ok()))
     assert client.get("/healthz").json() == {"status": "ok"}
