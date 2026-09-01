@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -122,6 +123,82 @@ func TestStatusEhEncaminhadoProAgente(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"ready":true`) {
 		t.Fatalf("corpo inesperado: %s", rec.Body.String())
+	}
+}
+
+// TestStatusFundeCotaDoIPNoGateway: o /api/status devolve, além do que o
+// agente já mandava, quanto da cota da janela o PRÓPRIO IP do cliente já
+// usou no gateway — número exato
+// do Valkey, não uma posição de fila inventada.
+func TestStatusFundeCotaDoIPNoGateway(t *testing.T) {
+	agent := newFakeAgent(t)
+	defer agent.Close()
+
+	srv := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: srv.Addr()})
+	limiter := NewRateLimiter(client, 5, time.Minute)
+
+	mux := newMux(mustParseURL(t, agent.URL), limiter, noCache(), noBreaker())
+
+	// gasta 2 unidades da cota desse IP via /api/ask (miss, sem cache) antes de checar o status
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(`{"question":"pergunta `+string(rune('a'+i))+`"}`))
+		req.RemoteAddr = "203.0.113.9:12345"
+		mux.ServeHTTP(httptest.NewRecorder(), req)
+	}
+
+	statusReq := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	statusReq.RemoteAddr = "203.0.113.9:12345"
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, statusReq)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, corpo = %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("corpo não é JSON válido: %v — %s", err, rec.Body.String())
+	}
+	gw, ok := body["gateway"].(map[string]any)
+	if !ok {
+		t.Fatalf("esperava campo \"gateway\" no corpo: %s", rec.Body.String())
+	}
+	if configured, _ := gw["configured"].(bool); !configured {
+		t.Fatalf("gateway.configured deveria ser true com limiter configurado: %+v", gw)
+	}
+	if used, _ := gw["used"].(float64); used != 2 {
+		t.Fatalf("gateway.used = %v, esperava 2", gw["used"])
+	}
+	if limit, _ := gw["limit"].(float64); limit != 5 {
+		t.Fatalf("gateway.limit = %v, esperava 5", gw["limit"])
+	}
+	// ainda traz o que o agente já mandava
+	if !strings.Contains(rec.Body.String(), `"ready":true`) {
+		t.Fatalf("corpo perdeu o campo do agente: %s", rec.Body.String())
+	}
+}
+
+// TestStatusGatewayNaoConfiguradoSemLimiter garante que, sem Valkey/limite,
+// a UI recebe um sinal explícito (configured=false) em vez de um 0 ambíguo.
+func TestStatusGatewayNaoConfiguradoSemLimiter(t *testing.T) {
+	agent := newFakeAgent(t)
+	defer agent.Close()
+
+	mux := newMux(mustParseURL(t, agent.URL), NewRateLimiter(nil, 0, time.Minute), noCache(), noBreaker())
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("corpo não é JSON válido: %v", err)
+	}
+	gw, ok := body["gateway"].(map[string]any)
+	if !ok {
+		t.Fatalf("esperava campo \"gateway\": %s", rec.Body.String())
+	}
+	if configured, _ := gw["configured"].(bool); configured {
+		t.Fatalf("sem limiter configurado, gateway.configured deveria ser false: %+v", gw)
 	}
 }
 

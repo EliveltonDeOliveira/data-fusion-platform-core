@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type ctxKey int
@@ -24,7 +26,7 @@ func newMux(agentURL *url.URL, limiter *RateLimiter, cache *ResponseCache, break
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthzHandler)
 	mux.Handle("POST /api/ask", newAskHandler(agentURL, limiter, cache, breaker))
-	mux.Handle("GET /api/status", newUpstreamProxy(agentURL, "/status"))
+	mux.Handle("GET /api/status", newStatusHandler(agentURL, limiter))
 	// Consulta determinística (sem LLM) de uso da terra — filtro região/ano/
 	// nível na UI não deveria gastar cota do Gemini nem esperar alguns
 	// segundos por uma leitura direta do Postgres. Passthrough puro: sem
@@ -60,6 +62,37 @@ func newUpstreamProxy(agentURL *url.URL, upstreamPath string) http.Handler {
 		req.URL.Path = upstreamPath
 	}
 	return proxy
+}
+
+// newStatusHandler funde o /status do agente (fila do rate limiter por
+// modelo, in_flight) com a cota do PRÓPRIO IP no rate limiter do gateway
+// (campo "gateway": used/limit/reset_seconds) — em vez de inventar uma
+// posição de fila (o mecanismo real é um teto por IP por janela, não uma
+// fila FIFO), devolve o número exato que a UI já tem no Valkey. Rota livre
+// — nunca gasta cota de LLM nem é limitada.
+func newStatusHandler(agentURL *url.URL, limiter *RateLimiter) http.Handler {
+	upstream := *agentURL
+	upstream.Path = "/status"
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload := map[string]any{"ready": false}
+		if resp, err := client.Get(upstream.String()); err == nil {
+			defer resp.Body.Close()
+			_ = json.NewDecoder(resp.Body).Decode(&payload)
+		}
+
+		snap := limiter.Snapshot(r.Context(), "ratelimit:"+clientIP(r))
+		payload["gateway"] = map[string]any{
+			"configured":    snap.Configured,
+			"used":          snap.Used,
+			"limit":         snap.Limit,
+			"reset_seconds": snap.ResetSeconds,
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(payload)
+	})
 }
 
 // newAskHandler encadeia cache → circuit breaker → rate limit → proxy: um

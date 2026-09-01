@@ -42,3 +42,34 @@ func (r *RateLimiter) Allow(ctx context.Context, key string) bool {
 	}
 	return count <= r.limit
 }
+
+// RateLimitSnapshot é o estado atual da janela de uma chave, pra mostrar ao
+// próprio cliente quanto da cota já usou — sem alterar o contador nem influenciar
+// o próximo Allow. Configured=false quando o rate limiter está desligado
+// (sem Valkey ou limite <= 0): a UI sabe distinguir "sem limite configurado"
+// de "0 usado".
+type RateLimitSnapshot struct {
+	Used         int64
+	Limit        int64
+	ResetSeconds int
+	Configured   bool
+}
+
+// Snapshot lê o contador e o TTL da chave sem incrementar (GET+TTL, não
+// INCR). Usado pelo /api/status pra devolver ao cliente sua própria cota
+// restante nesta janela — mais preciso que uma posição de fila inventada,
+// já que o mecanismo real é um teto por IP por minuto, não uma fila FIFO.
+func (r *RateLimiter) Snapshot(ctx context.Context, key string) RateLimitSnapshot {
+	if r == nil || r.client == nil || r.limit <= 0 {
+		return RateLimitSnapshot{}
+	}
+	used, err := r.client.Get(ctx, key).Int64()
+	if err != nil {
+		used = 0 // chave ainda não existe nesta janela (fail-open também aqui: mostra 0, não erro)
+	}
+	resetSeconds := 0
+	if ttl, err := r.client.TTL(ctx, key).Result(); err == nil && ttl > 0 {
+		resetSeconds = int(ttl.Seconds())
+	}
+	return RateLimitSnapshot{Used: used, Limit: r.limit, ResetSeconds: resetSeconds, Configured: true}
+}

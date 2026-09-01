@@ -82,3 +82,51 @@ func TestAllowFailOpenComLimiteZero(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotRefleteUsoAtual(t *testing.T) {
+	limiter, _ := newTestLimiter(t, 5, time.Minute)
+	ctx := context.Background()
+	limiter.Allow(ctx, "k")
+	limiter.Allow(ctx, "k")
+	limiter.Allow(ctx, "k")
+
+	snap := limiter.Snapshot(ctx, "k")
+	if !snap.Configured {
+		t.Fatal("com cliente e limite > 0, deveria vir Configured=true")
+	}
+	if snap.Used != 3 {
+		t.Fatalf("Used = %d, esperava 3", snap.Used)
+	}
+	if snap.Limit != 5 {
+		t.Fatalf("Limit = %d, esperava 5", snap.Limit)
+	}
+	if snap.ResetSeconds <= 0 {
+		t.Fatalf("ResetSeconds = %d, esperava > 0 (janela ainda ativa)", snap.ResetSeconds)
+	}
+}
+
+func TestSnapshotNaoIncrementaOContador(t *testing.T) {
+	limiter, _ := newTestLimiter(t, 1, time.Minute)
+	ctx := context.Background()
+	limiter.Snapshot(ctx, "k")
+	limiter.Snapshot(ctx, "k")
+	if !limiter.Allow(ctx, "k") {
+		t.Fatal("Snapshot não deveria consumir orçamento — 1ª chamada de Allow ainda devia passar")
+	}
+}
+
+func TestSnapshotChaveAindaNaoUsadaDevolveZero(t *testing.T) {
+	limiter, _ := newTestLimiter(t, 5, time.Minute)
+	snap := limiter.Snapshot(context.Background(), "nunca-usada")
+	if !snap.Configured || snap.Used != 0 || snap.ResetSeconds != 0 {
+		t.Fatalf("esperava Configured=true, Used=0, ResetSeconds=0 (sem janela ativa), obtive %+v", snap)
+	}
+}
+
+func TestSnapshotNaoConfiguradoSemCliente(t *testing.T) {
+	limiter := NewRateLimiter(nil, 5, time.Minute)
+	snap := limiter.Snapshot(context.Background(), "k")
+	if snap.Configured {
+		t.Fatal("sem cliente configurado, Snapshot deveria devolver Configured=false")
+	}
+}
