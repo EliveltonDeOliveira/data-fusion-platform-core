@@ -16,6 +16,7 @@ from satelite_agro_mcp.land_use import (
     _norm,
     _strip_region_wording,
     get_land_use_at_point,
+    get_land_use_change,
     get_land_use_summary,
 )
 
@@ -257,3 +258,96 @@ async def test_point_raster_ausente(tmp_path):
 
     assert not out.available
     assert any("não está montado" in n for n in out.notes)
+
+
+# --------------------------------------------------------------------------- #
+# get_land_use_change
+
+CHANGE_ROWS = [
+    {"label": "Agricultura", "code": "3.2", "year": 1990, "area_ha": 40000.0},
+    {"label": "Agricultura", "code": "3.2", "year": 2020, "area_ha": 64000.0},
+    {"label": "Formação Campestre", "code": "2.1", "year": 1990, "area_ha": 60000.0},
+    {"label": "Formação Campestre", "code": "2.1", "year": 2020, "area_ha": 52000.0},
+    {"label": "Formação Florestal", "code": "1.1", "year": 1990, "area_ha": 30000.0},
+]
+
+
+async def test_change_variacao_medida():
+    conn = FakeConn([SANTA_MARIA_ROW], CHANGE_ROWS)
+    out = await get_land_use_change("Santa Maria", 1990, 2020, 2, conn=conn)
+
+    assert out.available
+    assert out.year_from == 1990
+    assert out.year_to == 2020
+    assert out.location is not None and out.location.kind == "municipality"
+    # ordenado por |delta_ha|: Agricultura +24000, Campestre -8000, Florestal -30000
+    assert out.classes[0].label == "Formação Florestal"
+    assert out.classes[0].delta_ha == pytest.approx(-30000.0, abs=0.1)
+    agricultura = next(c for c in out.classes if c.label == "Agricultura")
+    assert agricultura.area_from_ha == pytest.approx(40000.0, abs=0.1)
+    assert agricultura.area_to_ha == pytest.approx(64000.0, abs=0.1)
+    assert agricultura.delta_ha == pytest.approx(24000.0, abs=0.1)
+    assert out.total_area_from_ha == pytest.approx(130000.0, abs=0.1)
+    assert out.total_area_to_ha == pytest.approx(116000.0, abs=0.1)
+
+
+async def test_change_estado_nao_resolve_municipio():
+    conn = FakeConn(CHANGE_ROWS)
+    out = await get_land_use_change("Rio Grande do Sul", 1990, 2020, 2, conn=conn)
+
+    assert out.available
+    assert out.location is not None and out.location.kind == "state"
+    assert "ibge_municipio" not in conn.executed[0][0]
+    assert conn.executed[0][1] == {"yf": 1990, "yt": 2020}
+
+
+async def test_change_ano_fora_da_faixa():
+    conn = FakeConn([SANTA_MARIA_ROW], CHANGE_ROWS)
+    out = await get_land_use_change("Santa Maria", 1970, 2020, 2, conn=conn)
+
+    assert not out.available
+    assert conn.executed == []
+    assert any("1985 a 2025" in n for n in out.notes)
+
+
+async def test_change_anos_iguais():
+    conn = FakeConn([SANTA_MARIA_ROW], CHANGE_ROWS)
+    out = await get_land_use_change("Santa Maria", 2020, 2020, 2, conn=conn)
+
+    assert not out.available
+    assert conn.executed == []
+    assert any("anos diferentes" in n for n in out.notes)
+
+
+async def test_change_nivel_invalido_nao_consulta():
+    conn = FakeConn([SANTA_MARIA_ROW], CHANGE_ROWS)
+    out = await get_land_use_change("Santa Maria", 1990, 2020, 9, conn=conn)
+
+    assert not out.available
+    assert conn.executed == []
+    assert any("nível inválido" in n for n in out.notes)
+
+
+async def test_change_municipio_desconhecido():
+    conn = FakeConn([])
+    out = await get_land_use_change("Londrina", 1990, 2020, 2, conn=conn)
+
+    assert not out.available
+    assert out.location is None
+    assert any("não é um município reconhecido" in n for n in out.notes)
+
+
+async def test_change_banco_indisponivel():
+    conn = FakeConn(raises=psycopg.OperationalError("connection refused"))
+    out = await get_land_use_change("Santa Maria", 1990, 2020, 2, conn=conn)
+
+    assert not out.available
+    assert any("indisponível" in n for n in out.notes)
+
+
+async def test_change_nivel_no_sql():
+    conn = FakeConn([SANTA_MARIA_ROW], CHANGE_ROWS)
+    await get_land_use_change("Santa Maria", 1990, 2020, 3, conn=conn)
+    agg_sql = conn.executed[1][0]
+    assert "level_3_pt" in agg_sql
+    assert "lu.year IN" in agg_sql

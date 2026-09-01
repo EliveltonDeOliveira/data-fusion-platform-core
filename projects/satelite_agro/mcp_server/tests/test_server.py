@@ -68,12 +68,35 @@ async def test_land_use_tools_registradas_com_schema():
     assert set(point.input_schema["properties"]) == {"lat", "lon", "year", "level"}
     assert point.input_schema["properties"]["year"]["default"] == 2025
 
+    change = tools["get_land_use_change"]
+    assert set(change.input_schema["properties"]) == {
+        "region",
+        "year_from",
+        "year_to",
+        "level",
+    }
+    assert change.input_schema["properties"]["level"]["default"] == 2
+
 
 async def test_land_use_sem_banco_nao_quebra(monkeypatch):
     # sem DATABASE_URL no ambiente -> a tool responde available=false com a
     # explicação em notes, nunca um erro de protocolo nem um número.
     monkeypatch.delenv("DATABASE_URL", raising=False)
     result = await mcp.call_tool("get_land_use_summary", {"region": "Santa Maria"})
+
+    assert not result.is_error
+    data = _payload(result)
+    assert data["available"] is False
+    assert data["classes"] == []
+    assert data["notes"]
+
+
+async def test_land_use_change_sem_banco_nao_quebra(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    result = await mcp.call_tool(
+        "get_land_use_change",
+        {"region": "Santa Maria", "year_from": 1990, "year_to": 2020},
+    )
 
     assert not result.is_error
     data = _payload(result)

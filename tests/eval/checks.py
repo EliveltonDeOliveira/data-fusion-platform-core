@@ -30,11 +30,14 @@ def norm(text: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# numeros "de medicao" no texto: valor colado a uma unidade de clima/solo.
-# Numeros sem unidade (7 dias, 2024, "um ponto") sao ignorados de proposito.
-
+# numeros "de medicao" no texto: valor colado a uma unidade de clima/solo ou de
+# variacao de uso da terra (pontos percentuais). Numeros sem unidade (7 dias,
+# 2024, "um ponto") sao ignorados de proposito. Hectares ficam de fora: o valor
+# quase sempre vem com separador de milhar ("38.402,1 ha"), que este regex nao
+# reconstroi corretamente — melhor nao extrair do que grounded contra o numero
+# errado.
 _MEASURE_RE = re.compile(
-    r"(-?\d+(?:[.,]\d+)?)\s?(graus\b|mm\b|m3/m3|%)",
+    r"(-?\d+(?:[.,]\d+)?)\s?(graus\b|mm\b|m3/m3|%|pontos percentuais|p\.p\.)",
     re.IGNORECASE,
 )
 _DEGREE_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s?°\s?c?", re.IGNORECASE)
@@ -128,9 +131,16 @@ def _data_numbers(payloads: list[dict[str, Any]]) -> set[float]:
             add(v)
         # uso da terra: percentuais e áreas por classe
         add(p.get("total_area_ha"))
+        add(p.get("total_area_from_ha"))
+        add(p.get("total_area_to_ha"))
         for row in p.get("classes") or []:
             add(row.get("area_ha"))
             add(row.get("area_pct"))
+            # variação entre anos (get_land_use_change)
+            add(row.get("area_from_ha"))
+            add(row.get("area_to_ha"))
+            add(row.get("delta_ha"))
+            add(row.get("delta_pct_points"))
     return vals
 
 
@@ -157,6 +167,25 @@ def _check_tool_calls(expect: dict, response: dict, rep: Report) -> None:
     for name in want:
         if name not in got:
             rep.failures.append(f"esperava chamada da tool {name!r}; tool_calls={got}")
+
+
+def _check_specialists(expect: dict, response: dict, rep: Report) -> None:
+    want = expect.get("specialists")
+    if want is None:
+        return
+    got = sorted(response.get("specialists") or [])
+    if got != sorted(want):
+        rep.failures.append(f"roteamento: esperava especialistas {sorted(want)}, veio {got}")
+
+
+def _check_correlation(expect: dict, response: dict, rep: Report) -> None:
+    """Pergunta de correlação: precisa de payload de clima E de uso da terra."""
+    if not expect.get("correlation"):
+        return
+    if not weather_payloads(response):
+        rep.failures.append("correlação: nenhum payload de clima no dado da resposta")
+    if not land_use_payloads(response):
+        rep.failures.append("correlação: nenhum payload de uso da terra no dado da resposta")
 
 
 def _check_available(expect: dict, payloads: list[dict], rep: Report) -> None:
@@ -310,6 +339,8 @@ def evaluate(case: dict[str, Any], response: dict[str, Any]) -> Report:
         rep.failures.append("resposta vazia")
 
     _check_tool_calls(expect, response, rep)
+    _check_specialists(expect, response, rep)
+    _check_correlation(expect, response, rep)
     _check_available(expect, payloads, rep)
     _check_location(expect, payloads, rep)
     _check_year(expect, payloads, rep)

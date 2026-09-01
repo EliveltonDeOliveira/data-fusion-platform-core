@@ -1,22 +1,36 @@
 # satelite_agro / agents
 
-Agente do Projeto 1. Um único agente (sem orquestrador): grafo
-[LangGraph](https://langchain-ai.github.io/langgraph/) via
-`langchain.agents.create_agent` + Gemini, com as tools servidas pelo
-`mcp_server` do projeto.
+Agente do Projeto 1. Arquitetura multi-agente sobre
+[LangGraph](https://langchain-ai.github.io/langgraph/): um **Supervisor**
+decide quais especialistas a pergunta precisa e reescreve a sub-pergunta de
+cada um; os especialistas (**Clima**, **Uso-da-Terra**) rodam em paralelo, cada
+um um agente ReAct (`create_agent`) com o subconjunto de tools do seu domínio,
+servidas pelo `mcp_server`; uma etapa de **síntese** junta as respostas quando
+mais de um especialista age. A saída é a mesma da versão de um agente só
+(`answer`, `tool_calls`, `data`) mais o campo `specialists`.
 
-O agente faz **raciocínio e redação**. Todo dado vem de tool — o modelo nunca
-preenche número. O `system_prompt` (`agent.py`) carrega as regras: informativo,
-nunca prescritivo; não inventa valor; repassa as `notes` da tool; sem previsão
-do futuro; escopo Rio Grande do Sul.
+Os agentes fazem **raciocínio e redação**. Todo dado vem de tool — o modelo
+nunca preenche número. O `system_prompt` (`agent.py`) carrega as regras comuns:
+informativo, nunca prescritivo; não inventa valor; repassa as `notes` da tool;
+sem previsão do futuro; sem análise causal; escopo Rio Grande do Sul.
 
-## Cota do modelo
+## Modelos e cota
 
-O provedor de LLM limita requisições por minuto e o loop ReAct faz várias
-chamadas por pergunta. O agente segura as chamadas ao modelo abaixo de um teto
-com um token bucket local (`InMemoryRateLimiter`), então nem produção nem os
-testes de ponta a ponta estouram esse limite. Ajuste por ambiente:
-`GEMINI_MAX_RPM` (padrão 10), `GEMINI_MAX_RETRIES` (padrão 3).
+O provedor de LLM limita requisições por minuto (por modelo) e o grafo faz
+várias chamadas por pergunta. Duas defesas:
+
+- **Alternância de modelos** — `GEMINI_MODELS` (lista) distribui os papéis
+  (supervisor, especialistas, síntese) entre modelos equivalentes; cada modelo
+  tem o seu próprio orçamento. `GEMINI_MODEL` (singular) força modelo único.
+- **Token bucket local** por modelo (`InMemoryRateLimiter`) abaixo de
+  `GEMINI_MAX_RPM` (padrão 10). `GEMINI_MAX_RETRIES` padrão 3.
+
+## Trace de roteamento
+
+Com `MLFLOW_TRACKING_URI` setado, cada requisição registra **só metadado
+estrutural** (especialistas acionados, tools chamadas, modelo por papel,
+latência) — nunca o texto da pergunta ou da resposta. Sem a variável, sem
+trace.
 
 ## Testes
 

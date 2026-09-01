@@ -1,13 +1,14 @@
-"""Monta o agente ReAct (LangGraph) com as tools do MCP server e o Gemini.
+"""Peças compartilhadas dos agentes: regras (system prompt), carga de tools do
+MCP server e o rate limiter das chamadas ao modelo.
 
-O agente não guarda estado entre requisições. As tools são carregadas uma vez
-no startup; cada chamada de tool abre a sua própria sessão HTTP com o MCP
-server (que é stateless), então reinício do MCP não derruba o agente.
+O grafo em si (Supervisor + especialistas + síntese) vive em `graph.py`. Nada
+aqui guarda estado entre requisições; as tools são carregadas uma vez no
+startup e cada chamada abre a sua própria sessão HTTP com o MCP server
+(stateless), então reinício do MCP não derruba o agente.
 """
 
 from __future__ import annotations
 
-from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -81,21 +82,27 @@ def build_rate_limiter(settings: Settings):
     )
 
 
-def build_model(settings: Settings) -> BaseChatModel:
+def build_model(
+    settings: Settings, *, model: str | None = None, rate_limiter=None
+) -> BaseChatModel:
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     return ChatGoogleGenerativeAI(
-        model=settings.model,
+        model=model or settings.model,
         google_api_key=settings.gemini_api_key,
         temperature=settings.temperature,
         timeout=settings.request_timeout,
         max_retries=settings.max_retries,
-        rate_limiter=build_rate_limiter(settings),
+        rate_limiter=rate_limiter if rate_limiter is not None else build_rate_limiter(settings),
     )
 
 
-async def build_agent(settings: Settings, *, model: BaseChatModel | None = None):
-    """Grafo pronto para `.ainvoke({"messages": [("user", pergunta)]})`."""
-    tools = await load_tools(settings)
-    llm = model or build_model(settings)
-    return create_agent(llm, tools, system_prompt=SYSTEM_PROMPT)
+async def build_agent(settings: Settings, **kwargs):
+    """Grafo compilado, pronto para `.ainvoke({"question": pergunta})`.
+
+    Delegado para `graph.build_graph` — mantido aqui como ponto de entrada
+    estável (import em `server.py` e nos testes `live`).
+    """
+    from .graph import build_graph
+
+    return await build_graph(settings, **kwargs)

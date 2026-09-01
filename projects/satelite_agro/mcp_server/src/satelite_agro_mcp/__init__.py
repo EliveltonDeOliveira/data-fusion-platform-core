@@ -6,18 +6,22 @@ raciocínio fica no agente; aqui só o acesso a dado, determinístico.
 """
 
 from .land_use import (
+    LandUseChange,
     LandUsePoint,
     LandUseSummary,
     get_land_use_at_point,
+    get_land_use_change,
     get_land_use_summary,
 )
 from .weather import WeatherTrend, get_weather_trend
 
 __all__ = [
+    "LandUseChange",
     "LandUsePoint",
     "LandUseSummary",
     "WeatherTrend",
     "get_land_use_at_point",
+    "get_land_use_change",
     "get_land_use_summary",
     "get_weather_trend",
 ]

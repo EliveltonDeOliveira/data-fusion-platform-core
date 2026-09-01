@@ -10,7 +10,7 @@ fica no agente.
 | `get_weather_trend(region, period, granularity, variables)` | implementada | Open-Meteo (ao vivo) |
 | `get_land_use_summary(region, year, level=2)` | implementada | MapBiomas Coleção 11 (pré-agregado) |
 | `get_land_use_at_point(lat, lon, year, level=2)` | implementada | MapBiomas Coleção 11 (raster do RS) |
-| `get_land_use_change(region, year_from, year_to, level=2)` | planejada | MapBiomas Coleção 11 (pré-agregado) |
+| `get_land_use_change(region, year_from, year_to, level=2)` | implementada | MapBiomas Coleção 11 (pré-agregado) |
 
 Escopo geográfico de todas: **Rio Grande do Sul** (piloto). Fora dele, ou sem
 dado para a consulta, a tool responde `available=false` com a explicação em
@@ -36,14 +36,15 @@ vivo.
 Classe de um ponto por leitura de 1 pixel (~30 m) do raster do RS. Só o ano com
 raster recortado está disponível; fora disso, aponta `get_land_use_summary`.
 
-### `get_land_use_change` (planejada)
+### `get_land_use_change`
 
 Variação da composição entre dois anos, do mesmo dado pré-agregado que o
-`summary` usa. Contrato pretendido:
+`summary` usa. Retorno:
 
 ```
 get_land_use_change(region, year_from, year_to, level=2)
   -> { available, location, year_from, year_to, level,
+       total_area_from_ha, total_area_to_ha,
        classes: [ { code, label,
                     area_from_ha, area_to_ha,
                     delta_ha, delta_pct_points } ],   # ordenado por |delta_ha|
@@ -51,8 +52,8 @@ get_land_use_change(region, year_from, year_to, level=2)
 ```
 
 Sem implicar causa nem projeção: só a diferença medida entre os dois anos, por
-classe. `year_from`/`year_to` fora de 1985–2025 ou `region` fora do RS →
-`available=false` com nota. Ainda não implementada.
+classe. `year_from`/`year_to` fora de 1985–2025, iguais, ou `region` fora do RS →
+`available=false` com nota.
 
 ### `level` (tools de uso da terra)
 

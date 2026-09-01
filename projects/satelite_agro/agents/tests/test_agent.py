@@ -7,6 +7,7 @@ from satelite_agro_agent.config import (
     DEFAULT_MAX_RPM,
     DEFAULT_MCP_URL,
     DEFAULT_MODEL,
+    DEFAULT_MODELS,
     Settings,
 )
 
@@ -39,30 +40,53 @@ def test_settings_exige_chave(monkeypatch):
 def test_settings_do_ambiente(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "  abc123  ")
     monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.delenv("GEMINI_MODELS", raising=False)
     monkeypatch.delenv("MCP_URL", raising=False)
 
     s = Settings.from_env()
 
     assert s.gemini_api_key == "abc123"
     assert s.model == DEFAULT_MODEL
+    assert s.models == DEFAULT_MODELS
     assert s.mcp_url == DEFAULT_MCP_URL
     assert s.temperature == 0.0
+    assert s.mlflow_tracking_uri is None
 
 
 def test_settings_override_modelo(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.delenv("GEMINI_MODELS", raising=False)
     monkeypatch.setenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
     monkeypatch.setenv("MCP_URL", "http://outro:9000/mcp")
 
     s = Settings.from_env()
 
     assert s.model == "gemini-3.1-flash-lite"
+    # GEMINI_MODEL sozinho -> modo de modelo único
+    assert s.models == ("gemini-3.1-flash-lite",)
     assert s.mcp_url == "http://outro:9000/mcp"
+
+
+def test_settings_lista_de_modelos(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.setenv("GEMINI_MODELS", " gemini-3.5-flash-lite , gemini-3.1-flash-lite ")
+
+    s = Settings.from_env()
+
+    assert s.models == ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
+    assert s.model == "gemini-3.5-flash-lite"
+
+
+def test_settings_mlflow_uri(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    assert Settings.from_env().mlflow_tracking_uri == "http://mlflow:5000"
 
 
 def test_default_nunca_e_pro():
     assert "flash-lite" in DEFAULT_MODEL
-    assert "pro" not in DEFAULT_MODEL.lower()
+    assert all("pro" not in m.lower() for m in DEFAULT_MODELS)
 
 
 def test_rate_limiter_respeita_o_teto():

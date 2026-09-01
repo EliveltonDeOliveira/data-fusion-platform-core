@@ -1,6 +1,11 @@
 {
   "project": "satelite_agro",
-  "tools": ["get_weather_trend", "get_land_use_summary", "get_land_use_at_point"],
+  "tools": [
+    "get_weather_trend",
+    "get_land_use_summary",
+    "get_land_use_at_point",
+    "get_land_use_change"
+  ],
   "cases": [
     {
       "id": "temp-porto-alegre",
@@ -168,6 +173,47 @@
           "nao faco recomend"
         ],
         "classes_grounded": true,
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "mudanca-uso-terra-santa-maria",
+      "question": "Como mudou o uso e a cobertura da terra no municipio de Santa Maria entre 1990 e 2020?",
+      "note": "get_land_use_change — variacao por classe entre dois anos, nivel 2 (padrao).",
+      "expect": {
+        "tool_calls": ["get_land_use_change"],
+        "specialists": ["uso_terra"],
+        "available": true,
+        "location_name_contains": "Santa Maria",
+        "level": 2,
+        "classes_grounded": true,
+        "answer_has_measure": true,
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "correlacao-clima-uso-terra-santa-maria",
+      "question": "Como o clima recente e a composicao de uso da terra se relacionam no municipio de Santa Maria?",
+      "note": "Correlacao: exige o especialista de clima E o de uso da terra. A resposta apresenta os dois lados, sem afirmar relacao causal.",
+      "expect": {
+        "specialists": ["clima", "uso_terra"],
+        "correlation": true,
+        "available": true,
+        "answer_mentions_any": ["Santa Maria"],
+        "no_prescription": true,
+        "grounded_numbers": true
+      }
+    },
+    {
+      "id": "correlacao-chuva-agricultura-rs",
+      "question": "Quanto choveu no Rio Grande do Sul nos ultimos 7 dias e que parcela do estado e agricultura?",
+      "note": "Correlacao a nivel de estado — clima (precipitacao, centroide) + uso da terra (agricultura). Dois especialistas, dado lado a lado.",
+      "expect": {
+        "specialists": ["clima", "uso_terra"],
+        "correlation": true,
+        "available": true,
         "no_prescription": true,
         "grounded_numbers": true
       }

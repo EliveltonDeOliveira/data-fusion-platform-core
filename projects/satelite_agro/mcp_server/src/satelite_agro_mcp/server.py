@@ -119,6 +119,35 @@ async def get_land_use_at_point(lat: float, lon: float, year: int = 2025, level:
     return result.model_dump(mode="json")
 
 
+_LAND_USE_CHANGE_DESC = """\
+Variação de uso e cobertura da terra (MapBiomas Coleção 11) de uma região do Rio
+Grande do Sul entre dois anos, por classe, em hectares. Fonte: mesmo dado anual
+pré-agregado do get_land_use_summary (1985-2025), lido nos dois anos e
+diferenciado. Determinístico, sem LLM. Informativo: entrega a variação medida e o
+contexto histórico — nunca a causa, nunca projeção de tendência, nunca
+recomendação.
+
+Parâmetros:
+- region: município do RS ("Santa Maria"), "região de X" (resolve para o município
+  X) ou o estado ("RS", "Rio Grande do Sul"). Fora do RS ou nome não reconhecido
+  -> available=false com a explicação em notes.
+- year_from, year_to: dois anos distintos entre 1985 e 2025. Fora da faixa ou
+  iguais -> available=false.
+- level: nível da legenda hierárquica, 1 a 4. Padrão 2. Mesmo "carry down" do
+  summary. Sempre explícito, nunca agrega/desagrega em silêncio.
+
+Retorno: available, location, year_from, year_to, level, total_area_from_ha,
+total_area_to_ha, classes (code, label, area_from_ha, area_to_ha, delta_ha,
+delta_pct_points; ordenado por |delta_ha|) e notes. Sempre repasse as notes."""
+
+
+@mcp.tool(name="get_land_use_change", description=_LAND_USE_CHANGE_DESC)
+async def get_land_use_change(region: str, year_from: int, year_to: int, level: int = 2) -> dict:
+    """Adapta `land_use.get_land_use_change` para a camada MCP."""
+    result = await land_use.get_land_use_change(region, year_from, year_to, level)
+    return result.model_dump(mode="json")
+
+
 @mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
 async def healthz(_request: Request) -> PlainTextResponse:
     return PlainTextResponse("ok")

@@ -57,10 +57,38 @@ _LAND_POINT_OK = {
     "label": "Área Urbanizada",
     "name_pt": "Área Urbanizada",
 }
+_LAND_CHANGE_OK = {
+    "region_query": "Santa Maria",
+    "available": True,
+    "location": {"name": "Santa Maria", "kind": "municipality", "geocode": "4316907"},
+    "year_from": 1990,
+    "year_to": 2020,
+    "level": 2,
+    "total_area_from_ha": 178020.5,
+    "total_area_to_ha": 178020.5,
+    "classes": [
+        {
+            "code": "3.2",
+            "label": "Agricultura",
+            "area_from_ha": 40000.0,
+            "area_to_ha": 64000.0,
+            "delta_ha": 24000.0,
+            "delta_pct_points": 13.5,
+        }
+    ],
+}
 
 
-def _resp(answer: str, *, tools=("get_weather_trend",), data=(_WEATHER_OK,)) -> dict:
-    return {"answer": answer, "model": "x", "tool_calls": list(tools), "data": list(data)}
+def _resp(
+    answer: str, *, tools=("get_weather_trend",), data=(_WEATHER_OK,), specialists=None
+) -> dict:
+    return {
+        "answer": answer,
+        "model": "x",
+        "tool_calls": list(tools),
+        "specialists": list(specialists or []),
+        "data": list(data),
+    }
 
 
 class GroundingTests(unittest.TestCase):
@@ -184,6 +212,51 @@ class LandUseTests(unittest.TestCase):
         self.assertEqual(len(checks.weather_payloads(resp)), 1)
         self.assertEqual(len(checks.land_use_payloads(resp)), 2)
         self.assertEqual(len(checks.tool_payloads(resp)), 3)
+
+
+class RoutingTests(unittest.TestCase):
+    def test_especialistas_esperados_ok(self):
+        case = {"id": "r1", "expect": {"specialists": ["clima", "uso_terra"]}}
+        resp = _resp("...", tools=(), data=(), specialists=["uso_terra", "clima"])
+        self.assertTrue(checks.evaluate(case, resp).ok)
+
+    def test_especialista_faltando_falha(self):
+        case = {"id": "r2", "expect": {"specialists": ["clima", "uso_terra"]}}
+        resp = _resp("...", tools=(), data=(), specialists=["clima"])
+        self.assertFalse(checks.evaluate(case, resp).ok)
+
+    def test_correlacao_exige_os_dois_payloads(self):
+        case = {"id": "r3", "expect": {"correlation": True}}
+        ok = _resp("...", tools=(), data=(_WEATHER_OK, _LAND_SUMMARY_OK))
+        so_clima = _resp("...", tools=(), data=(_WEATHER_OK,))
+        self.assertTrue(checks.evaluate(case, ok).ok)
+        self.assertFalse(checks.evaluate(case, so_clima).ok)
+
+    def test_change_delta_grounded_passa(self):
+        case = {
+            "id": "r4",
+            "expect": {
+                "tool_calls": ["get_land_use_change"],
+                "classes_grounded": True,
+                "grounded_numbers": True,
+            },
+        }
+        resp = _resp(
+            "Entre 1990 e 2020 a Agricultura em Santa Maria ganhou participacao: +13,5%.",
+            tools=("get_land_use_change",),
+            data=(_LAND_CHANGE_OK,),
+        )
+        rep = checks.evaluate(case, resp)
+        self.assertTrue(rep.ok, rep.failures)
+
+    def test_change_delta_inventado_falha(self):
+        case = {"id": "r5", "expect": {"grounded_numbers": True}}
+        resp = _resp(
+            "A Agricultura cresceu 90% em participacao.",
+            tools=("get_land_use_change",),
+            data=(_LAND_CHANGE_OK,),
+        )
+        self.assertFalse(checks.evaluate(case, resp).ok)
 
 
 class DatasetTests(unittest.TestCase):

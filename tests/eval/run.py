@@ -2,7 +2,7 @@
 
     AGENT_URL=<url-do-agente> python run.py [--dataset cases/satelite_agro.json]
                                             [--case ID] [--json] [--timeout 180]
-                                            [--delay 6]
+                                            [--delay 10]
 
 So stdlib. Envia cada pergunta a `POST {AGENT_URL}/ask`, aplica as checagens de
 `checks.py` e imprime um relatorio. Sai com codigo 1 se algum caso falhar — da
@@ -87,7 +87,10 @@ def run(
             rep.failures.append(f"falha ao chamar o agente: {exc}")
             reports.append(rep)
             continue
-        reports.append(checks.evaluate(case, response))
+        rep = checks.evaluate(case, response)
+        specs = ",".join(response.get("specialists") or []) or "-"
+        rep.warnings.insert(0, f"roteou para: {specs}")
+        reports.append(rep)
     return reports
 
 
@@ -112,8 +115,8 @@ def main() -> int:
     parser.add_argument(
         "--delay",
         type=float,
-        default=float(os.environ.get("EVAL_CASE_DELAY", "6")),
-        help="segundos entre casos (2a camada de proteção de cota; padrão 6)",
+        default=float(os.environ.get("EVAL_CASE_DELAY", "10")),
+        help="segundos entre casos (2a camada de proteção de cota; padrão 10)",
     )
     parser.add_argument("--agent-url", default=os.environ.get("AGENT_URL", ""))
     args = parser.parse_args()

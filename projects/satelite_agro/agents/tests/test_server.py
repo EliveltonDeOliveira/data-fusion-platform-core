@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from satelite_agro_agent import server
 from satelite_agro_agent.config import Settings
@@ -18,53 +17,48 @@ def _install(agent) -> TestClient:
     return TestClient(server.app)
 
 
-def _conversa_ok() -> list:
-    return [
-        HumanMessage(content="temperatura média em Porto Alegre?"),
-        AIMessage(
-            content="",
-            tool_calls=[
-                {
-                    "name": "get_weather_trend",
-                    "args": {"region": "Porto Alegre", "period": "7d"},
-                    "id": "call-1",
-                    "type": "tool_call",
-                }
-            ],
-        ),
-        ToolMessage(
-            content='{"available": true, "region_query": "Porto Alegre", "summary": []}',
-            tool_call_id="call-1",
-        ),
-        AIMessage(content="A temperatura média foi 17,0 °C nos últimos 7 dias."),
-    ]
+def _state_ok() -> dict:
+    return {
+        "answer": "A temperatura média foi 17,0 °C nos últimos 7 dias.",
+        "tool_calls": ["get_weather_trend"],
+        "specialists": ["clima"],
+        "data": [{"available": True, "region_query": "Porto Alegre", "summary": []}],
+    }
 
 
 def test_ask_repassa_resposta_tools_e_dados():
-    client = _install(StubAgent(_conversa_ok()))
+    client = _install(StubAgent(_state_ok()))
     r = client.post("/ask", json={"question": "temp média em porto alegre nos últimos 7 dias?"})
 
     assert r.status_code == 200
     body = r.json()
     assert "17,0 °C" in body["answer"]
     assert body["tool_calls"] == ["get_weather_trend"]
+    assert body["specialists"] == ["clima"]
     assert body["model"] == "gemini-3.5-flash-lite"
     assert body["data"] == [{"available": True, "region_query": "Porto Alegre", "summary": []}]
 
 
-def test_ask_data_vazio_sem_toolmessage():
-    client = _install(StubAgent([AIMessage(content="Sem escopo para previsão.")]))
-    r = client.post("/ask", json={"question": "previsão?"})
+def test_ask_correlacao_dois_especialistas():
+    state = {
+        "answer": "Clima: 17 °C. Uso da terra: 40% agricultura.",
+        "tool_calls": ["get_weather_trend", "get_land_use_summary"],
+        "specialists": ["clima", "uso_terra"],
+        "data": [{"available": True}, {"available": True}],
+    }
+    client = _install(StubAgent(state))
+    r = client.post("/ask", json={"question": "clima e uso da terra em santa maria?"})
+    assert r.status_code == 200
+    assert r.json()["specialists"] == ["clima", "uso_terra"]
+    assert len(r.json()["data"]) == 2
+
+
+def test_ask_data_vazio():
+    client = _install(StubAgent({"answer": "Reformule a pergunta.", "specialists": []}))
+    r = client.post("/ask", json={"question": "oi"})
     assert r.status_code == 200
     assert r.json()["data"] == []
-
-
-def test_ask_resposta_em_blocos_gemini():
-    msgs = [AIMessage(content=[{"type": "text", "text": "Choveu 12 mm."}])]
-    client = _install(StubAgent(msgs))
-    r = client.post("/ask", json={"question": "choveu quanto?"})
-    assert r.status_code == 200
-    assert r.json()["answer"] == "Choveu 12 mm."
+    assert r.json()["specialists"] == []
 
 
 def test_ask_sem_agente_pronto_503():
@@ -81,19 +75,19 @@ def test_ask_falha_do_agente_vira_502():
 
 
 def test_ask_resposta_vazia_502():
-    client = _install(StubAgent([AIMessage(content="")]))
+    client = _install(StubAgent({"answer": "", "specialists": ["clima"]}))
     r = client.post("/ask", json={"question": "oi"})
     assert r.status_code == 502
 
 
 def test_ask_valida_pergunta():
-    client = _install(StubAgent(_conversa_ok()))
+    client = _install(StubAgent(_state_ok()))
     assert client.post("/ask", json={"question": ""}).status_code == 422
     assert client.post("/ask", json={}).status_code == 422
 
 
 def test_healthz():
-    client = _install(StubAgent(_conversa_ok()))
+    client = _install(StubAgent(_state_ok()))
     assert client.get("/healthz").json() == {"status": "ok"}
 
     server._state.clear()
@@ -111,9 +105,26 @@ async def test_live_pergunta_ancora():
     settings = Settings.from_env()
     agent = await build_agent(settings)
     out = await agent.ainvoke(
-        {"messages": [("user", "Qual foi a temperatura média em Porto Alegre na última semana?")]}
+        {"question": "Qual foi a temperatura média em Porto Alegre na última semana?"}
     )
-    final = out["messages"][-1]
-    assert isinstance(final, AIMessage) and final.content
-    called = [c["name"] for m in out["messages"] for c in (getattr(m, "tool_calls", None) or [])]
-    assert "get_weather_trend" in called
+    assert isinstance(out.get("answer"), str) and out["answer"]
+    assert "get_weather_trend" in (out.get("tool_calls") or [])
+    assert out.get("specialists") == ["clima"]
+
+
+@pytest.mark.live
+async def test_live_correlacao_dois_especialistas():
+    from satelite_agro_agent.agent import build_agent
+
+    settings = Settings.from_env()
+    agent = await build_agent(settings)
+    out = await agent.ainvoke(
+        {
+            "question": (
+                "Como o clima recente e a composição de uso da terra se "
+                "relacionam no município de Santa Maria?"
+            )
+        }
+    )
+    assert set(out.get("specialists") or []) == {"clima", "uso_terra"}
+    assert isinstance(out.get("answer"), str) and out["answer"]

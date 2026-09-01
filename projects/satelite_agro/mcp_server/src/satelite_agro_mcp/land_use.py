@@ -120,6 +120,29 @@ class LandUsePoint(BaseModel):
     notes: list[str] = []
 
 
+class LandUseChangeClass(BaseModel):
+    code: str | None
+    label: str
+    area_from_ha: float
+    area_to_ha: float
+    delta_ha: float
+    delta_pct_points: float  # variação da participação da classe, em pontos percentuais
+
+
+class LandUseChange(BaseModel):
+    region_query: str
+    available: bool
+    location: LandUseLocation | None = None
+    year_from: int | None = None
+    year_to: int | None = None
+    level: int = 2
+    total_area_from_ha: float | None = None
+    total_area_to_ha: float | None = None
+    classes: list[LandUseChangeClass] = []
+    source: str = SOURCE
+    notes: list[str] = []
+
+
 # --------------------------------------------------------------------------- #
 # helpers
 
@@ -458,16 +481,153 @@ async def get_land_use_at_point(
 
 
 # --------------------------------------------------------------------------- #
-# get_land_use_change - PLANEJADA, ainda não registrada como tool.
-#
-#   get_land_use_change(region, year_from, year_to, level=2) -> {
-#       available, location, year_from, year_to, level,
-#       classes: [ {code, label, area_from_ha, area_to_ha,
-#                   delta_ha, delta_pct_points} ],   # ordenado por |delta_ha|
-#       source, notes }
-#
-# Mesmo dado pré-agregado do summary (`land_use_municipality`), lido nos dois
-# anos e diferenciado por classe no nível pedido. Só a variação medida - nunca
-# causa nem projeção. year_* fora de 1985-2025 ou region fora do RS ->
-# available=false com nota. Reaproveita `_resolve_region`, `_label_sql`,
-# `_code_sql`, `_validate_level` e a faixa MIN_YEAR/MAX_YEAR deste módulo.
+# get_land_use_change
+
+
+def _out_of_range(*years: int) -> int | None:
+    for y in years:
+        if not (MIN_YEAR <= y <= MAX_YEAR):
+            return y
+    return None
+
+
+async def get_land_use_change(
+    region: str,
+    year_from: int,
+    year_to: int,
+    level: int = 2,
+    *,
+    conn: psycopg.AsyncConnection | None = None,
+) -> LandUseChange:
+    """Variação de área por classe entre dois anos. Só a diferença medida — nunca
+    causa nem projeção. Mesmo dado pré-agregado do summary (`land_use_municipality`)."""
+    lvl = _validate_level(level)
+    if lvl is None:
+        return LandUseChange(
+            region_query=region,
+            available=False,
+            level=level,
+            notes=[f"nível inválido: {level}. Use 1, 2, 3 ou 4 (padrão 2)."],
+        )
+
+    bad = _out_of_range(year_from, year_to)
+    if bad is not None:
+        return LandUseChange(
+            region_query=region,
+            available=False,
+            year_from=year_from,
+            year_to=year_to,
+            level=lvl,
+            notes=[
+                f"o uso da terra do MapBiomas vai de {MIN_YEAR} a {MAX_YEAR}; "
+                f"não há dado para {bad}."
+            ],
+        )
+    if year_from == year_to:
+        return LandUseChange(
+            region_query=region,
+            available=False,
+            year_from=year_from,
+            year_to=year_to,
+            level=lvl,
+            notes=["informe dois anos diferentes para comparar a variação."],
+        )
+
+    try:
+        async with _acquire(conn) as active:
+            loc, notes = await _resolve_region(active, region)
+            if loc is None:
+                return LandUseChange(
+                    region_query=region,
+                    available=False,
+                    year_from=year_from,
+                    year_to=year_to,
+                    level=lvl,
+                    notes=notes,
+                )
+
+            where = "lu.year IN (%(yf)s, %(yt)s)"
+            params: dict[str, object] = {"yf": year_from, "yt": year_to}
+            if loc.kind == "municipality":
+                where += " AND lu.geocode = %(geocode)s"
+                params["geocode"] = loc.geocode
+
+            sql = (
+                f"SELECT {_label_sql(lvl)} AS label, {_code_sql(lvl)} AS code, "  # noqa: S608 - nível é int validado
+                f"lu.year AS year, sum(lu.area_ha) AS area_ha "
+                f"FROM satelite_agro.land_use_municipality lu "
+                f"JOIN satelite_agro.mapbiomas_legend g ON g.class_id = lu.class_id "
+                f"WHERE {where} "
+                f"GROUP BY 1, 2, 3"
+            )
+            async with active.cursor() as cur:
+                await cur.execute(sql, params)
+                rows = await cur.fetchall()
+    except _DB_UNAVAILABLE as exc:
+        return LandUseChange(
+            region_query=region,
+            available=False,
+            year_from=year_from,
+            year_to=year_to,
+            level=lvl,
+            notes=[f"consulta de uso da terra indisponível no momento ({type(exc).__name__})."],
+        )
+
+    if not rows:
+        notes.append(
+            f"sem linhas de uso da terra para {loc.name} em {year_from} ou {year_to} — "
+            f"verifique se a ingestão dos anos foi feita."
+        )
+        return LandUseChange(
+            region_query=region,
+            available=False,
+            location=loc,
+            year_from=year_from,
+            year_to=year_to,
+            level=lvl,
+            notes=notes,
+        )
+
+    by_class: dict[tuple[str | None, str], dict[int, float]] = {}
+    for r in rows:
+        key = (r["code"], r["label"])
+        slot = by_class.setdefault(key, {year_from: 0.0, year_to: 0.0})
+        slot[int(r["year"])] += float(r["area_ha"])
+
+    total_from = sum(v[year_from] for v in by_class.values())
+    total_to = sum(v[year_to] for v in by_class.values())
+
+    classes = [
+        LandUseChangeClass(
+            code=code,
+            label=label,
+            area_from_ha=round(v[year_from], 1),
+            area_to_ha=round(v[year_to], 1),
+            delta_ha=round(v[year_to] - v[year_from], 1),
+            delta_pct_points=round(
+                (v[year_to] / total_to * 100 if total_to else 0.0)
+                - (v[year_from] / total_from * 100 if total_from else 0.0),
+                2,
+            ),
+        )
+        for (code, label), v in by_class.items()
+    ]
+    classes.sort(key=lambda c: abs(c.delta_ha), reverse=True)
+
+    notes.append(
+        f"variação de área (hectares) por classe de nível {lvl} do {SOURCE} entre "
+        f"{year_from} e {year_to}, {'estado' if loc.kind == 'state' else 'município'} do RS. "
+        f"Apenas a variação medida — não indica causa nem projeta tendência."
+    )
+    return LandUseChange(
+        region_query=region,
+        available=True,
+        location=loc,
+        year_from=year_from,
+        year_to=year_to,
+        level=lvl,
+        total_area_from_ha=round(total_from, 1),
+        total_area_to_ha=round(total_to, 1),
+        classes=classes,
+        notes=notes,
+    )
