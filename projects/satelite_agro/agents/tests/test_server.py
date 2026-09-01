@@ -119,6 +119,41 @@ def test_status_repassa_stats_do_pool():
     assert body["models"]["gemini-3.5-flash-lite"] == {"max_rpm": 10, "waiting": 0}
 
 
+def test_nenhum_texto_livre_da_pergunta_ou_resposta_chega_ao_trace(monkeypatch):
+    """Valida em código que o trace do MLflow nunca vê o texto literal da
+    pergunta nem da resposta, só metadado estrutural (specialists/tool_calls/
+    latência). Guarda contra regressão se algum dia alguém passar
+    `req.question`/`result["answer"]` pra `trace.log_routing`."""
+    from .test_observability import _FakeMlflowClient, _install_fake_mlflow
+
+    pergunta_sentinela = "SENTINELA-PERGUNTA-xyz789: qual a temperatura em Bagé?"
+    resposta_sentinela = "SENTINELA-RESPOSTA-abc123: 18,4 °C nos últimos 7 dias."
+
+    client = _FakeMlflowClient(experiments={"satelite_agro": "exp-1"})
+    _install_fake_mlflow(monkeypatch, client)
+
+    state = {
+        "answer": resposta_sentinela,
+        "tool_calls": ["get_weather_trend"],
+        "specialists": ["clima"],
+        "data": [],
+    }
+    server._state["agent"] = StubAgent(state)
+    server._state["settings"] = Settings(
+        gemini_api_key="x",
+        model="gemini-3.5-flash-lite",
+        mlflow_tracking_uri="http://mlflow:5000",
+    )
+
+    r = TestClient(server.app).post("/ask", json={"question": pergunta_sentinela})
+    assert r.status_code == 200
+    assert r.json()["answer"] == resposta_sentinela  # a API continua devolvendo o texto pro usuário
+
+    logado = repr(client.logged["tags"]) + repr(client.logged["metrics"])
+    assert "SENTINELA-PERGUNTA" not in logado
+    assert "SENTINELA-RESPOSTA" not in logado
+
+
 async def test_in_flight_conta_enquanto_o_agente_processa_e_zera_no_final():
     """Reproduz o achado do dono: o widget só devia mudar DURANTE o
     processamento, não só depois que a resposta chega. `in_flight` cobre o
