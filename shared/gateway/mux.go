@@ -35,6 +35,8 @@ func newMux(agentURL *url.URL, limiter *RateLimiter, cache *ResponseCache, break
 	mux.Handle("GET /api/land_use/change", newUpstreamProxy(agentURL, "/land_use/change"))
 	// Idem, pra resolver região -> lat/lon (apoio de mapa na UI, mesmo geocoding do clima).
 	mux.Handle("GET /api/region/point", newUpstreamProxy(agentURL, "/region/point"))
+	// Idem, mesma tool do especialista de clima -- prévia padrão da UI sem gastar cota do LLM.
+	mux.Handle("GET /api/weather/trend", newUpstreamProxy(agentURL, "/weather/trend"))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "não implementado", http.StatusNotImplemented)
 	})

@@ -287,6 +287,38 @@ def test_region_point_sem_agente_pronto_503():
     assert r.status_code == 503
 
 
+def test_weather_trend_repassa_o_payload_da_tool():
+    tool = _FakeTool({"available": True, "region_query": "RS", "series": []})
+    client = _install(StubAgent(_state_ok(), tools_by_name={"get_weather_trend": tool}))
+    r = client.get("/weather/trend", params={"region": "RS", "period": "7d"})
+    assert r.status_code == 200
+    assert r.json()["available"] is True
+    assert tool.calls == [{"region": "RS", "period": "7d", "granularity": "daily"}]
+
+
+def test_weather_trend_repassa_variables_quando_informado():
+    tool = _FakeTool({"available": True, "series": []})
+    client = _install(StubAgent(_state_ok(), tools_by_name={"get_weather_trend": tool}))
+    client.get(
+        "/weather/trend",
+        params={"region": "RS", "variables": "temperature, precipitation"},
+    )
+    assert tool.calls == [
+        {
+            "region": "RS",
+            "period": "7d",
+            "granularity": "daily",
+            "variables": ["temperature", "precipitation"],
+        }
+    ]
+
+
+def test_weather_trend_sem_agente_pronto_503():
+    client = TestClient(server.app)  # sem lifespan -> _state vazio
+    r = client.get("/weather/trend", params={"region": "RS"})
+    assert r.status_code == 503
+
+
 def test_healthz():
     client = _install(StubAgent(_state_ok()))
     assert client.get("/healthz").json() == {"status": "ok"}

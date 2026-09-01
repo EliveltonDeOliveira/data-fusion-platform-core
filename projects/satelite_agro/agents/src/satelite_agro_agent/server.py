@@ -134,6 +134,23 @@ async def region_point(query: str) -> dict[str, Any]:
     return await _call_tool_direct("resolve_region_point", region=query)
 
 
+@app.get("/weather/trend")
+async def weather_trend(
+    region: str,
+    period: str = "7d",
+    granularity: str = "daily",
+    variables: str | None = None,
+) -> dict[str, Any]:
+    """Mesma tool que o especialista de clima usa, sem LLM — pra prévia
+    padrão da UI (não gasta cota nem espera o Supervisor decidir nada).
+    `variables` é uma lista separada por vírgula (`temperature,precipitation`)
+    pra não precisar de query param repetido."""
+    kwargs: dict[str, Any] = {"region": region, "period": period, "granularity": granularity}
+    if variables:
+        kwargs["variables"] = [v.strip() for v in variables.split(",") if v.strip()]
+    return await _call_tool_direct("get_weather_trend", **kwargs)
+
+
 @app.post("/ask", response_model=AskResponse)
 async def ask(req: AskRequest) -> AskResponse:
     agent = _state.get("agent")
