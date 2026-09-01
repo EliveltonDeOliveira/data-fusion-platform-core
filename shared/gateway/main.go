@@ -40,8 +40,11 @@ func main() {
 	limiter := NewRateLimiter(valkey, int64(limit), time.Minute)
 	cacheTTL := time.Duration(envOrInt("GATEWAY_ASK_CACHE_TTL", 300)) * time.Second
 	cache := NewResponseCache(valkey, cacheTTL)
+	breakerThreshold := envOrInt("GATEWAY_CIRCUIT_BREAKER_THRESHOLD", 3)
+	breakerCooldown := time.Duration(envOrInt("GATEWAY_CIRCUIT_BREAKER_COOLDOWN", 30)) * time.Second
+	breaker := NewCircuitBreaker(breakerThreshold, breakerCooldown)
 
-	mux := newMux(agentURL, limiter, cache)
+	mux := newMux(agentURL, limiter, cache, breaker)
 
 	srv := &http.Server{
 		Addr:              ":" + port,

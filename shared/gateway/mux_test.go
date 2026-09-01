@@ -62,6 +62,12 @@ func noCache() *ResponseCache {
 	return NewResponseCache(nil, 0)
 }
 
+// noBreaker devolve um circuit breaker sempre desligado (threshold=0) — pros
+// testes que não são sobre o breaker.
+func noBreaker() *CircuitBreaker {
+	return NewCircuitBreaker(0, 0)
+}
+
 func newTestCache(t *testing.T, ttl time.Duration) *ResponseCache {
 	t.Helper()
 	srv := miniredis.RunT(t)
@@ -73,7 +79,7 @@ func TestAskEhEncaminhadoProAgente(t *testing.T) {
 	agent := newFakeAgent(t)
 	defer agent.Close()
 
-	mux := newMux(mustParseURL(t, agent.URL), NewRateLimiter(nil, 0, time.Minute), noCache())
+	mux := newMux(mustParseURL(t, agent.URL), NewRateLimiter(nil, 0, time.Minute), noCache(), noBreaker())
 	req := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(`{"question":"oi"}`))
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -90,7 +96,7 @@ func TestStatusEhEncaminhadoProAgente(t *testing.T) {
 	agent := newFakeAgent(t)
 	defer agent.Close()
 
-	mux := newMux(mustParseURL(t, agent.URL), NewRateLimiter(nil, 0, time.Minute), noCache())
+	mux := newMux(mustParseURL(t, agent.URL), NewRateLimiter(nil, 0, time.Minute), noCache(), noBreaker())
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -108,7 +114,7 @@ func TestRateLimitBloqueiaAposOLimiteEmAsk(t *testing.T) {
 	defer agent.Close()
 
 	limiter, _ := newTestLimiter(t, 1, time.Minute)
-	mux := newMux(mustParseURL(t, agent.URL), limiter, noCache())
+	mux := newMux(mustParseURL(t, agent.URL), limiter, noCache(), noBreaker())
 
 	primeira := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(`{"question":"a"}`))
 	primeira.Header.Set("X-Forwarded-For", "10.0.0.1")
@@ -132,7 +138,7 @@ func TestRateLimitEhPorIP(t *testing.T) {
 	defer agent.Close()
 
 	limiter, _ := newTestLimiter(t, 1, time.Minute)
-	mux := newMux(mustParseURL(t, agent.URL), limiter, noCache())
+	mux := newMux(mustParseURL(t, agent.URL), limiter, noCache(), noBreaker())
 
 	reqA := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(`{"question":"a"}`))
 	reqA.Header.Set("X-Forwarded-For", "10.0.0.1")
@@ -154,7 +160,7 @@ func TestStatusNaoEhLimitado(t *testing.T) {
 	defer agent.Close()
 
 	limiter, _ := newTestLimiter(t, 1, time.Minute)
-	mux := newMux(mustParseURL(t, agent.URL), limiter, noCache())
+	mux := newMux(mustParseURL(t, agent.URL), limiter, noCache(), noBreaker())
 
 	// consome o orçamento de /api/ask pro IP...
 	ask := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(`{"question":"a"}`))
@@ -179,7 +185,7 @@ func TestAskCacheHitNaoBateNoAgente(t *testing.T) {
 
 	cache := newTestCache(t, time.Minute)
 	limiter, _ := newTestLimiter(t, 100, time.Minute)
-	mux := newMux(mustParseURL(t, agent.URL), limiter, cache)
+	mux := newMux(mustParseURL(t, agent.URL), limiter, cache, noBreaker())
 
 	pergunta := `{"question":"mesma pergunta"}`
 	req1 := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(pergunta))
@@ -209,7 +215,7 @@ func TestAskCacheHitNaoContaNoRateLimit(t *testing.T) {
 
 	cache := newTestCache(t, time.Minute)
 	limiter, _ := newTestLimiter(t, 1, time.Minute) // só 1 pergunta/min por IP
-	mux := newMux(mustParseURL(t, agent.URL), limiter, cache)
+	mux := newMux(mustParseURL(t, agent.URL), limiter, cache, noBreaker())
 
 	mesma := `{"question":"repete"}`
 	ip := "10.0.0.9"
@@ -248,7 +254,7 @@ func TestAskNaoCacheiaResposta5xx(t *testing.T) {
 
 	cache := newTestCache(t, time.Minute)
 	limiter, _ := newTestLimiter(t, 100, time.Minute)
-	mux := newMux(mustParseURL(t, agent.URL), limiter, cache)
+	mux := newMux(mustParseURL(t, agent.URL), limiter, cache, noBreaker())
 
 	pergunta := `{"question":"falha"}`
 	for i := 0; i < 2; i++ {
@@ -261,6 +267,88 @@ func TestAskNaoCacheiaResposta5xx(t *testing.T) {
 	}
 	if calls := agent.AskCalls(); calls != 2 {
 		t.Fatalf("erro nunca deveria ser cacheado — esperava 2 chamadas ao agente, teve %d", calls)
+	}
+}
+
+func TestAskCircuitBreakerAbreDepoisDeFalhasEBloqueiaSemBaterNoAgente(t *testing.T) {
+	agent := newFakeAgentWithStatus(t, http.StatusBadGateway)
+	defer agent.Close()
+
+	limiter, _ := newTestLimiter(t, 100, time.Minute)
+	breaker := NewCircuitBreaker(2, time.Minute)
+	mux := newMux(mustParseURL(t, agent.URL), limiter, noCache(), breaker)
+
+	perguntas := []string{`{"question":"q1"}`, `{"question":"q2"}`}
+	for i, p := range perguntas {
+		req := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(p))
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadGateway {
+			t.Fatalf("chamada %d: status = %d, esperava 502 (repassado do agente)", i+1, rec.Code)
+		}
+	}
+	if calls := agent.AskCalls(); calls != 2 {
+		t.Fatalf("esperava 2 chamadas ao agente antes do circuito abrir, teve %d", calls)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(`{"question":"depois de abrir"}`))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("com o circuito aberto esperava 503, veio %d", rec.Code)
+	}
+	if calls := agent.AskCalls(); calls != 2 {
+		t.Fatalf("com o circuito aberto o agente não deveria receber mais chamadas, teve %d", calls)
+	}
+}
+
+func TestAskCacheHitFuncionaMesmoComCircuitoAberto(t *testing.T) {
+	agent := newFakeAgent(t)
+	defer agent.Close()
+
+	cache := newTestCache(t, time.Minute)
+	limiter, _ := newTestLimiter(t, 100, time.Minute)
+	breaker := NewCircuitBreaker(1, time.Hour)
+	mux := newMux(mustParseURL(t, agent.URL), limiter, cache, breaker)
+
+	pergunta := `{"question":"vai pro cache"}`
+	req1 := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(pergunta))
+	mux.ServeHTTP(httptest.NewRecorder(), req1)
+
+	breaker.RecordFailure() // simula uma degradação depois que a resposta já estava cacheada
+	if breaker.Allow() {
+		t.Fatal("sanity check: circuito deveria estar aberto agora")
+	}
+
+	req2 := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(pergunta))
+	rec2 := httptest.NewRecorder()
+	mux.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK || rec2.Header().Get("X-Cache") != "hit" {
+		t.Fatalf("cache hit deveria funcionar mesmo com o circuito aberto, status=%d", rec2.Code)
+	}
+}
+
+func TestAskSucessoZeraOContadorDeFalhas(t *testing.T) {
+	agent := newFakeAgent(t) // sempre 200
+	defer agent.Close()
+
+	limiter, _ := newTestLimiter(t, 100, time.Minute)
+	breaker := NewCircuitBreaker(2, time.Minute)
+	mux := newMux(mustParseURL(t, agent.URL), limiter, noCache(), breaker)
+
+	breaker.RecordFailure() // 1 falha manual — ainda fechado (limite=2)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/ask", strings.NewReader(`{"question":"ok"}`))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("deveria passar normalmente, status = %d", rec.Code)
+	}
+
+	// o sucesso (200) deveria ter zerado o contador — só 1 falha nova não pode abrir.
+	breaker.RecordFailure()
+	if !breaker.Allow() {
+		t.Fatal("sucesso deveria zerar o contador de falhas: 1 falha nova (limite=2) não deveria abrir")
 	}
 }
 
@@ -285,7 +373,7 @@ func TestRotaNaoImplementadaContinuaComo501(t *testing.T) {
 	agent := newFakeAgent(t)
 	defer agent.Close()
 
-	mux := newMux(mustParseURL(t, agent.URL), NewRateLimiter(nil, 0, time.Minute), noCache())
+	mux := newMux(mustParseURL(t, agent.URL), NewRateLimiter(nil, 0, time.Minute), noCache(), noBreaker())
 	req := httptest.NewRequest(http.MethodGet, "/api/algo-futuro", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)

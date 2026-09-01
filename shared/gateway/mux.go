@@ -18,12 +18,12 @@ type ctxKey int
 const askCacheKeyCtx ctxKey = iota
 
 // newMux monta as rotas do gateway: proxy pro agente atrás de /api/ask
-// (cache de resposta + rate limit por IP) e /api/status (livre — só
-// consulta a fila, não gasta cota de LLM).
-func newMux(agentURL *url.URL, limiter *RateLimiter, cache *ResponseCache) *http.ServeMux {
+// (cache de resposta + circuit breaker + rate limit por IP) e /api/status
+// (livre — só consulta a fila, não gasta cota de LLM).
+func newMux(agentURL *url.URL, limiter *RateLimiter, cache *ResponseCache, breaker *CircuitBreaker) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", healthzHandler)
-	mux.Handle("POST /api/ask", newAskHandler(agentURL, limiter, cache))
+	mux.Handle("POST /api/ask", newAskHandler(agentURL, limiter, cache, breaker))
 	mux.Handle("GET /api/status", newUpstreamProxy(agentURL, "/status"))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "não implementado", http.StatusNotImplemented)
@@ -49,17 +49,30 @@ func newUpstreamProxy(agentURL *url.URL, upstreamPath string) http.Handler {
 	return proxy
 }
 
-// newAskHandler encadeia cache → rate limit → proxy: um hit de cache nunca
-// consome o orçamento por IP (não bate no LLM); só um miss passa pelo
-// limiter e, se a resposta do agente vier 200, fica guardada pro próximo.
-func newAskHandler(agentURL *url.URL, limiter *RateLimiter, cache *ResponseCache) http.Handler {
+// newAskHandler encadeia cache → circuit breaker → rate limit → proxy: um
+// hit de cache nunca consome o orçamento por IP nem depende do circuito
+// (não bate no agente); um miss só segue se o circuito estiver fechado e o
+// IP tiver orçamento. Resposta >=500 ou falha de rede conta como falha pro
+// breaker; 200 fecha o circuito e, se ainda não tinha cache, fica guardada.
+func newAskHandler(agentURL *url.URL, limiter *RateLimiter, cache *ResponseCache, breaker *CircuitBreaker) http.Handler {
 	proxy := httputil.NewSingleHostReverseProxy(agentURL)
 	director := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		director(req)
 		req.URL.Path = "/ask"
 	}
+	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
+		breaker.RecordFailure()
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"detail":"não foi possível falar com o agente"}`))
+	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
+		if resp.StatusCode >= http.StatusInternalServerError {
+			breaker.RecordFailure()
+			return nil
+		}
+		breaker.RecordSuccess()
 		if resp.StatusCode != http.StatusOK {
 			return nil
 		}
@@ -95,6 +108,11 @@ func newAskHandler(agentURL *url.URL, limiter *RateLimiter, cache *ResponseCache
 			return
 		}
 
+		if !breaker.Allow() {
+			writeServiceUnavailable(w, breaker.RetryAfterSeconds())
+			return
+		}
+
 		if !limiter.Allow(r.Context(), "ratelimit:"+clientIP(r)) {
 			writeTooManyRequests(w)
 			return
@@ -113,6 +131,15 @@ func writeTooManyRequests(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusTooManyRequests)
 	_, _ = w.Write([]byte(
 		`{"detail":"muitas perguntas em pouco tempo — aguarde um pouco e tente de novo"}`,
+	))
+}
+
+func writeServiceUnavailable(w http.ResponseWriter, retryAfterSeconds int) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds))
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = w.Write([]byte(
+		`{"detail":"o serviço está temporariamente indisponível — tente novamente em instantes"}`,
 	))
 }
 
