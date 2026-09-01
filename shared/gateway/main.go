@@ -35,7 +35,13 @@ func main() {
 		log.Fatalf("AGENT_URL inválido: %v", err)
 	}
 
-	mux := newMux(agentURL, buildRateLimiter())
+	valkey := buildValkeyClient()
+	limit := envOrInt("GATEWAY_RATE_LIMIT_RPM", 6)
+	limiter := NewRateLimiter(valkey, int64(limit), time.Minute)
+	cacheTTL := time.Duration(envOrInt("GATEWAY_ASK_CACHE_TTL", 300)) * time.Second
+	cache := NewResponseCache(valkey, cacheTTL)
+
+	mux := newMux(agentURL, limiter, cache)
 
 	srv := &http.Server{
 		Addr:              ":" + port,
@@ -61,20 +67,20 @@ func main() {
 	}
 }
 
-// buildRateLimiter fica sem limite (sempre permite) se VALKEY_URL não
-// estiver configurada — dev local sem a infra completa não deve travar.
-func buildRateLimiter() *RateLimiter {
+// buildValkeyClient devolve nil se VALKEY_URL não estiver configurada — dev
+// local sem a infra completa não deve travar (rate limiter e cache ficam
+// sem-op automaticamente com client nil, ver ratelimiter.go/cache.go).
+func buildValkeyClient() *redis.Client {
 	valkeyURL := os.Getenv("VALKEY_URL")
 	if valkeyURL == "" {
-		return NewRateLimiter(nil, 0, time.Minute)
+		return nil
 	}
 	opts, err := redis.ParseURL(valkeyURL)
 	if err != nil {
-		log.Printf("VALKEY_URL inválida, rate limit desligado: %v", err)
-		return NewRateLimiter(nil, 0, time.Minute)
+		log.Printf("VALKEY_URL inválida, rate limit e cache desligados: %v", err)
+		return nil
 	}
-	limit := envOrInt("GATEWAY_RATE_LIMIT_RPM", 6)
-	return NewRateLimiter(redis.NewClient(opts), int64(limit), time.Minute)
+	return redis.NewClient(opts)
 }
 
 func envOr(key, fallback string) string {
