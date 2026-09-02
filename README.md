@@ -14,19 +14,6 @@ saída constitui recomendação de ação:
 2. **Rádio/Comunicação** — consciência de infraestrutura de telecom a partir de
    dados de outorga pública.
 
-## Estrutura
-
-```
-shared/
-  gateway/        # ponto de entrada (Go)
-  llm_router/     # seleção de provedor de LLM
-  db/migrations/  # schema versionado (golang-migrate)
-projects/
-  satelite_agro/      { ingestion · agents · mcp_server · rag_corpus }
-  radio_comunicacao/  { ingestion · agents · mcp_server · rag_corpus }
-tests/eval/       # dataset dourado por projeto
-```
-
 ## Fontes de dados
 
 | Fonte | Uso |
