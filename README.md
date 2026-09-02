@@ -17,7 +17,6 @@ monitoramento**, nenhuma saída constitui recomendação de ação.
 |---|---|
 | [MapBiomas](https://brasil.mapbiomas.org/) | Uso e cobertura da terra, fogo e superfície d'água (séries anuais) |
 | [Open-Meteo](https://open-meteo.com/) | Temperatura, precipitação, evapotranspiração, umidade e temperatura do solo |
-| [Copernicus / Sentinel Hub (CDSE)](https://dataspace.copernicus.eu/) | Imagens Sentinel para índices de vegetação _(planejado)_ |
 | [IBGE — Malhas Territoriais](https://servicodados.ibge.gov.br/api/docs/malhas) | Limites territoriais para recorte e estatística zonal |
 
 ## Desenvolvimento
@@ -29,10 +28,12 @@ Tudo roda em container — nada é instalado na máquina. Dependências Python c
 
 ## Atribuição
 
-Dados publicados sob a Política de Dados Abertos do Poder Executivo Federal
-(Decreto 8.777/2016) são de reuso livre, com obrigação de creditar a fonte.
-MapBiomas é licenciado sob [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.pt_BR)
-(uso público e aberto, mediante referência à fonte).
+- **MapBiomas** e **Open-Meteo** são licenciados sob
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/deed.pt_BR) — uso
+  público e aberto, mediante referência à fonte.
+- **IBGE** publica sob a Política de Dados Abertos do Poder Executivo Federal
+  (Decreto 8.777/2016): reuso livre, com obrigação de creditar a fonte (a
+  política não define uma licença Creative Commons específica).
 
 ## Licença
 
