@@ -37,4 +37,5 @@ Tudo roda em container — nada é instalado na máquina. Dependências Python c
 
 ## Licença
 
-A definir.
+[MIT](LICENSE) — cobre só o código deste repositório. Os dados usados têm
+suas próprias licenças (ver "Atribuição" acima).
