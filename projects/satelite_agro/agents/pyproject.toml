@@ -1,7 +1,7 @@
 [project]
 name = "satelite-agro-agent"
 version = "0.1.0"
-description = "Agente do Projeto 1 (Satélite + Agro/GIS) — LangGraph + Gemini, consome as tools via MCP."
+description = "Agente multi-especialista do satelite_agro (LangGraph); consome as tools via MCP."
 requires-python = ">=3.11"
 dependencies = [
     "langchain>=1,<2",

@@ -1,4 +1,4 @@
-"""MCP server do Projeto 1 — Satélite + Agro/GIS.
+"""MCP server do satelite_agro — Satélite + Agro/GIS.
 
 Expõe tools de acesso a dado público: clima ao vivo (Open-Meteo) e uso/cobertura
 da terra (MapBiomas Coleção 11, pré-agregado no banco local + raster do RS). O

@@ -94,8 +94,7 @@ Dataset-âncora determinístico em [`tests/eval/`](tests/eval/) — perguntas
 reais rodadas contra o agente e checadas por regras puras (sem LLM na
 checagem), cobrindo: roteamento entre especialistas (incluindo perguntas que
 exigem dois ao mesmo tempo), honestidade quando o dado não existe (fora da
-região piloto, ano sem cobertura) e o guardrail de não-recomendação. Última
-rodada ao vivo: **13/17** casos. Ver
+região piloto, ano sem cobertura) e o guardrail de não-recomendação. Ver
 [`tests/eval/cases/satelite_agro.json`](tests/eval/cases/satelite_agro.json)
 para o dataset completo e [`tests/eval/checks.py`](tests/eval/checks.py) para
 as checagens.

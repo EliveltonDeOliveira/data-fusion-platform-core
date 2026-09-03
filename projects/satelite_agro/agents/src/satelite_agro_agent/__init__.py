@@ -1,4 +1,4 @@
-"""Agente do Projeto 1 — Satélite + Agro/GIS.
+"""Agente do satelite_agro — Satélite + Agro/GIS.
 
 Arquitetura multi-agente (LangGraph): um Supervisor decompõe a pergunta e delega
 a especialistas (Clima, Uso-da-Terra), que rodam em paralelo; uma etapa de

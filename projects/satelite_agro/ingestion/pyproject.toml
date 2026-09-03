@@ -1,7 +1,7 @@
 [project]
 name = "satelite-agro-ingestion"
 version = "0.1.0"
-description = "Ingestão e fusão de dado público (MapBiomas, IBGE) do Projeto 1. Determinístico, sem LLM."
+description = "Ingestão e fusão de dado público (MapBiomas, IBGE) do satelite_agro. Determinístico, sem LLM."
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",

@@ -1,4 +1,4 @@
-"""Cache curto (Redis/Valkey) para as chamadas ao vivo.
+"""Cache curto (Redis) para as chamadas ao vivo.
 
 Só um par get/set com TTL de minutos, chave prefixada por projeto. Sem
 persistência: se o cache estiver fora, ele não age — a ferramenta ainda responde.

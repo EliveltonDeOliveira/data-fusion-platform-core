@@ -2,8 +2,8 @@
 
 Registra por requisição: quais especialistas rodaram, que tools foram chamadas,
 qual modelo em cada papel, latência. NUNCA registra o texto da pergunta nem da
-resposta. O autolog do LangChain não é ativado aqui (o filtro fino é assunto de
-uma fase posterior; este módulo já nasce sem persistir texto livre).
+resposta. O autolog do LangChain não é ativado aqui (o filtro fino fica para
+mais adiante; este módulo já nasce sem persistir texto livre).
 
 Usa `MlflowClient` (API não-fluente) em vez de `mlflow.start_run()`/`mlflow.
 set_tag()` etc. — a API fluente guarda a "run ativa" numa pilha thread-local, e

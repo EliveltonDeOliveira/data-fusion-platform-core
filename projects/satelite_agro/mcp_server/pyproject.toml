@@ -1,7 +1,7 @@
 [project]
 name = "satelite-agro-mcp"
 version = "0.1.0"
-description = "MCP server do Projeto 1 (Satélite + Agro/GIS) — tools de acesso a dado público."
+description = "MCP server do satelite_agro (Satélite + Agro/GIS) — tools de acesso a dado público."
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
