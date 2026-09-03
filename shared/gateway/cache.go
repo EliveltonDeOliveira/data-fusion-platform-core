@@ -10,7 +10,7 @@ import (
 )
 
 // ResponseCache guarda a resposta de /ask no Valkey por um TTL curto — a
-// mesma pergunta repetida (comum em demo/teste, ou 2 usuários perguntando a
+// mesma pergunta repetida (comum sob teste, ou 2 usuários perguntando a
 // mesma coisa) não gasta cota do LLM de novo. Só respostas 200 são
 // cacheadas — erro nunca fica cacheado, senão uma falha temporária do
 // provedor "gruda" pelo TTL inteiro.

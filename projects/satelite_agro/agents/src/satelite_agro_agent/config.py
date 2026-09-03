@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-# Flash-Lite — nunca Pro.
+# Modelo padrão: um LLM de baixo custo/latência serve para o volume de chamadas
+# do grafo. Sobrescreva com GEMINI_MODEL / GEMINI_MODELS no ambiente.
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 # Vários modelos equivalentes: o pool alterna entre eles por papel (supervisor,
 # especialistas, síntese) para distribuir as chamadas — cada modelo tem o seu

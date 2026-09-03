@@ -7,8 +7,8 @@ Duas entradas, ambas informativas (dado + contexto, nunca recomendação):
   1985-2025). "Regiao de X" resolve para o municipio X e, opcionalmente, o
   estado inteiro - sem buffer de vizinhos, sem calculo zonal ao vivo.
 - `get_land_use_at_point(lat, lon, year, level)` - classe de um ponto, por
-  leitura de 1 pixel do raster do RS ja recortado. So o ano da demo (2025) tem
-  raster; fora disso, ou fora do RS, responde `available=false`.
+  leitura de 1 pixel do raster do RS ja recortado. So o ano de referencia
+  (2025) tem raster; fora disso, ou fora do RS, responde `available=false`.
 
 `level` (1 a 4, padrao 2) e sempre explicito: a hierarquia canonica vem da tabela
 `mapbiomas_legend`, e a consulta faz "carry down" (do nível pedido para o mais

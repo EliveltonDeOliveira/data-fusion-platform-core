@@ -10,7 +10,7 @@
           |                         2+ -> 1 chamada LLM compõe a correlação)
      {answer, data, tool_calls, specialists}
 
-O contrato de saída é o mesmo do agente único da fase anterior, então a UI não
+O contrato de saída é o mesmo da versão de um agente só, então a UI não
 muda. Todo número objetivo vem dos payloads das tools, nunca do modelo —
 inclusive o especialista de metodologia, que só cita o que a busca no corpus
 RAG devolveu.

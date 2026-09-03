@@ -1,7 +1,7 @@
 """Corpus RAG: extrai e fragmenta o subconjunto dos ATBDs da MapBiomas Coleção
-11 usado nesta demo, a partir dos PDFs baixados manualmente pelo dono do
-projeto (ver `Settings.raw_dir` / `DOCS_SUBDIR` para onde a etapa espera
-encontrá-los, conforme o ambiente de execução).
+11 usado neste projeto, a partir dos PDFs obtidos manualmente (ver
+`Settings.raw_dir` / `DOCS_SUBDIR` para onde a etapa espera encontrá-los,
+conforme o ambiente de execução).
 
 Subconjunto deliberado (nem todo PDF baixado entra): cobre metodologia geral,
 o bioma dominante do RS (Pampa) e as classes mais relevantes pro escopo atual
