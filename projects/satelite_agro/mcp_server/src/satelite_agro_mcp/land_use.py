@@ -885,7 +885,6 @@ async def get_land_use_raster_overlay(
         image_base64=png_b64,
         notes=[
             f"visão geral do RS com a paleta oficial do {SOURCE} ({year}), resolução "
-            f"reduzida pra visualização web ({width}x{height} px) — não é leitura de "
-            f"pixel exata (use get_land_use_at_point pra isso)."
+            f"reduzida pra visualização web ({width}x{height} px)."
         ],
     )
