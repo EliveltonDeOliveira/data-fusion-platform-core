@@ -1,17 +1,12 @@
 # data-fusion-platform-core
 
 Sistema multi-agente que funde **dados públicos institucionais brasileiros**
-(sensoriamento remoto, clima/solo) para monitoramento agro/GIS — sempre em
-caráter **informativo, nunca prescritivo**. Este repositório é só o núcleo:
-agentes, tools MCP, ingestão e schema. Orquestração e configuração de
-execução são mantidas separadamente.
+— sensoriamento remoto e condição climática/de solo — para monitoramento
+agro/GIS na região piloto do Rio Grande do Sul. Caráter **informativo, nunca
+prescritivo**: nenhuma saída constitui recomendação de ação.
 
-## Objetivo
-
-Sensoriamento remoto e condição climática/de solo aplicados à agricultura
-(região piloto: Rio Grande do Sul), fundindo fontes públicas institucionais
-distintas num só sistema multi-agente — sempre em caráter **informativo e de
-monitoramento**, nenhuma saída constitui recomendação de ação.
+Este repositório é só o núcleo — agentes, tools MCP, ingestão e schema.
+Orquestração e configuração de execução ficam separadas.
 
 ## Arquitetura
 
@@ -90,23 +85,20 @@ quebrar assinatura.
 
 ## Avaliação
 
-Dataset-âncora determinístico em [`tests/eval/`](tests/eval/) — perguntas
-reais rodadas contra o agente e checadas por regras puras (sem LLM na
-checagem), cobrindo: roteamento entre especialistas (incluindo perguntas que
-exigem dois ao mesmo tempo), honestidade quando o dado não existe (fora da
-região piloto, ano sem cobertura) e o guardrail de não-recomendação. Ver
-[`tests/eval/cases/satelite_agro.json`](tests/eval/cases/satelite_agro.json)
-para o dataset completo e [`tests/eval/checks.py`](tests/eval/checks.py) para
-as checagens.
+Dataset-âncora determinístico em [`tests/eval/`](tests/eval/): perguntas reais
+rodadas contra o agente e checadas por regras puras — sem LLM na checagem.
+Cobre roteamento entre especialistas (inclusive perguntas que exigem dois),
+honestidade quando não há dado (fora da região piloto, ano sem cobertura) e o
+guardrail de não-recomendação. Dataset em
+[`cases/satelite_agro.json`](tests/eval/cases/satelite_agro.json), checagens em
+[`checks.py`](tests/eval/checks.py).
 
 ## Limitações
 
-- Cobertura piloto: Rio Grande do Sul. Fora disso, o agente recusa e explica
-  em vez de inventar um número.
-- Uso e cobertura da terra é um produto **anual** por natureza (MapBiomas) —
-  tratado como tendência/contexto histórico, não como leitura do dia.
-- Caráter informativo/monitoramento: nenhuma saída recomenda ação (ver
-  "Objetivo").
+- Cobertura piloto: Rio Grande do Sul — fora disso o agente recusa e explica
+  em vez de estimar.
+- Uso e cobertura da terra é um produto **anual** (MapBiomas), tratado como
+  tendência histórica, não leitura do dia.
 
 ## Como rodar os testes
 
